@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Reward Rocket 🚀</title>
+  <meta name="description" content="Award points, track progress and redeem prizes.">
+  <meta name="theme-color" content="#1b1464">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Reward Rocket">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <!-- Shown until js/config.js has the Supabase details -->
+  <section id="screen-config" class="screen" hidden>
+    <div class="card">
+      <div class="big-logo">🚀</div>
+      <h1>Almost ready!</h1>
+      <p class="sub">Reward Rocket isn't connected to its database yet.</p>
+      <p>Open <b>js/config.js</b> and paste in your Supabase Project URL and publishable key. The README walks through it step by step.</p>
+    </div>
+  </section>
+
+  <!-- Login -->
+  <section id="screen-login" class="screen" hidden>
+    <form class="card" id="login-form" autocomplete="on">
+      <div class="big-logo">🚀</div>
+      <h1>Reward Rocket</h1>
+      <p class="sub">Parents, sign in to blast off!</p>
+      <label class="field"><span>Email</span>
+        <input class="input" type="email" name="email" autocomplete="username" required inputmode="email" autocapitalize="off"></label>
+      <label class="field"><span>Password</span>
+        <input class="input" type="password" name="password" autocomplete="current-password" required></label>
+      <p class="err" id="login-err"></p>
+      <button class="btn block" type="submit">Sign in</button>
+      <p class="center"><button type="button" class="linkish" id="forgot">Forgot password?</button></p>
+    </form>
+  </section>
+
+  <!-- Choose a new password (after a reset email) -->
+  <section id="screen-reset" class="screen" hidden>
+    <form class="card" id="reset-form">
+      <div class="big-logo">🔑</div>
+      <h1>New password</h1>
+      <p class="sub">Pick a new password for Reward Rocket.</p>
+      <label class="field"><span>New password</span>
+        <input class="input" type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+      <p class="err" id="reset-err"></p>
+      <button class="btn block" type="submit">Save password</button>
+    </form>
+  </section>
+
+  <!-- Signed in, but not on the parents list -->
+  <section id="screen-denied" class="screen" hidden>
+    <div class="card center">
+      <div class="big-logo">🛸</div>
+      <h1>Not on the crew list</h1>
+      <p class="sub" id="denied-email"></p>
+      <p>This account isn't one of the parent accounts. Add its email to the <b>parents</b> table in Supabase (see the README), then sign in again.</p>
+      <button class="btn block" data-signout>Sign out</button>
+    </div>
+  </section>
+
+  <!-- The app -->
+  <main id="screen-app" hidden>
+    <div class="wrap">
+      <header class="topbar">
+        <div class="brand"><span class="logo">🚀</span> Reward Rocket</div>
+        <div class="sync" id="sync">Live</div>
+      </header>
+
+      <!-- AWARD -->
+      <section data-tab="award">
+        <div class="card hero" id="hero"></div>
+        <div class="section-title">Tap to award <small>Tap a mistake? Hit Undo.</small></div>
+        <div class="tiles" id="tiles"></div>
+        <div class="actions-row">
+          <button class="btn green" id="btn-bonus">➕ Bonus points</button>
+          <button class="btn red" id="btn-deduct">➖ Take away</button>
+        </div>
+      </section>
+
+      <!-- PRIZES -->
+      <section data-tab="prizes" hidden>
+        <div class="section-title">Prize store <button class="btn sm white" id="btn-add-prize">＋ Add prize</button></div>
+        <div class="prizes" id="prize-list"></div>
+        <div class="card">
+          <h2>🎁 Prizes redeemed</h2>
+          <ul class="list" id="redeemed"></ul>
+        </div>
+      </section>
+
+      <!-- HISTORY -->
+      <section data-tab="history" hidden>
+        <div class="card">
+          <h2>📈 Last 7 days</h2>
+          <div class="week" id="week"></div>
+          <div class="summary" id="summary"></div>
+        </div>
+        <div class="card">
+          <h2>📜 Points history</h2>
+          <div class="chips" id="filters">
+            <button class="chip on" data-f="all">All</button>
+            <button class="chip" data-f="earn">Earned</button>
+            <button class="chip" data-f="adjust">Bonus / taken</button>
+            <button class="chip" data-f="redeem">Prizes</button>
+          </div>
+          <div id="history"></div>
+          <button class="btn ghost block" id="load-older" hidden>Load older</button>
+        </div>
+      </section>
+
+      <!-- SETUP -->
+      <section data-tab="setup" hidden>
+        <div class="card">
+          <h2>⭐ Behaviors &amp; points</h2>
+          <ul class="list" id="behavior-admin"></ul>
+          <button class="btn block" id="btn-add-behavior" style="margin-top:10px">＋ Add behavior</button>
+        </div>
+        <div class="card">
+          <h2>🧒 Kid's dashboard</h2>
+          <label class="field"><span>Name</span>
+            <div class="stepper"><input class="input" id="kid-name" maxlength="30" style="text-align:left;font-size:16px;font-weight:600"><button class="btn sm" id="save-kid-name" style="width:auto">Save</button></div></label>
+          <p class="muted" style="margin:0 0 10px">A view-only page for him: points, prizes and progress. It can't change anything. Open it on his tablet and add it to the home screen.</p>
+          <code class="box" id="kid-link"></code>
+          <div class="btns" style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn sm" id="copy-kid-link">📋 Copy link</button>
+            <a class="btn sm pink" id="open-kid-link" target="_blank" rel="noopener">👀 Open</a>
+            <button class="btn sm ghost" id="new-kid-link">🔄 New link</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>👤 Account</h2>
+          <p class="muted" id="who" style="margin-top:0"></p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn sm ghost" id="change-pw">🔑 Change password</button>
+            <button class="btn sm ghost" data-signout>🚪 Sign out</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="nav" aria-label="Main">
+      <div class="in">
+        <button data-go="award" class="on"><span>🚀</span>Award</button>
+        <button data-go="prizes"><span>🎁</span>Prizes</button>
+        <button data-go="history"><span>📜</span>History</button>
+        <button data-go="setup"><span>⚙️</span>Setup</button>
+      </div>
+    </nav>
+  </main>
+
+  <script src="vendor/supabase-2.117.3.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/parent.js"></script>
+</body>
+</html>
