@@ -77,7 +77,14 @@ img { max-width: 100%; display: block; }
   position: relative; overflow: hidden; color: #fff;
   background: linear-gradient(135deg, #ff4fa3 0%, #7c4dff 55%, #19c3d6 100%);
 }
-.hero .kid { font-size: 15px; opacity: .9; }
+.hero .kid { font-size: 15px; display: flex; align-items: center; gap: 10px; }
+.hero .kid .avatar { width: 46px; height: 46px; font-size: 24px; border: 3px solid rgba(255,255,255,.85); }
+
+/* Kid's profile photo (falls back to a rocket emoji) */
+.avatar { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; flex: none; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--yellow), var(--orange)); font-size: 26px; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar.lg { width: 84px; height: 84px; font-size: 42px; border: 4px solid var(--soft); }
 .hero .bal { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 10px; }
 .hero .bal b { font-size: 56px; line-height: 1; font-weight: 700; text-shadow: 0 4px 0 rgba(0,0,0,.12); }
 .hero .bal span { font-size: 18px; font-weight: 600; opacity: .9; }
@@ -282,3 +289,6 @@ code.box { display: block; background: var(--soft); padding: 10px 12px; border-r
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* A real button inside a stepper row (e.g. Save next to the kid's name) */
+.stepper button.btn { width: auto; background: var(--purple); color: #fff; font-size: 15px; padding: 0 18px; }

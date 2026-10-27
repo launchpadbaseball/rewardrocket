@@ -124,6 +124,13 @@
         </div>
         <div class="card">
           <h2>🧒 Kid's dashboard</h2>
+          <div class="photo-pick" style="margin-bottom:14px">
+            <div class="avatar lg" id="avatar-thumb"></div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label class="btn sm">📷 Profile photo<input type="file" accept="image/*" hidden id="avatar-file"></label>
+              <button type="button" class="btn sm ghost" id="avatar-remove" hidden>Remove photo</button>
+            </div>
+          </div>
           <label class="field"><span>Name</span>
             <div class="stepper"><input class="input" id="kid-name" maxlength="30" style="text-align:left;font-size:16px;font-weight:600"><button class="btn sm" id="save-kid-name" style="width:auto">Save</button></div></label>
           <p class="muted" style="margin:0 0 10px">A view-only page for him: points, prizes and progress. It can't change anything. Open it on his tablet and add it to the home screen.</p>

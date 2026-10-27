@@ -48,6 +48,9 @@
     const { kid_name, balance, behaviors, rewards, recent } = data;
     document.title = `${kid_name}’s Reward Rocket 🚀`;
     $('#k-hi').textContent = `Hi ${kid_name}! 👋`;
+    const av = $('#k-avatar');
+    av.classList.toggle('photo', !!data.avatar_url);
+    av.innerHTML = data.avatar_url ? `<img src="${esc(data.avatar_url)}" alt="">` : '🪐';
     RR.countTo($('#k-bal'), balance);
 
     const st = stats(recent);

@@ -19,6 +19,10 @@ A points-and-prizes app for Jaylen. Mom and Dad each sign in from their own phon
 
 Run `supabase/add-sports.sql` once in Supabase → **SQL Editor → New query → Run**. It adds the sports section and 7 starter sports behaviors, and moves "Good sportsmanship" into it. Nothing you've earned or set up is changed. (New installs don't need this; `setup.sql` already includes it.)
 
+## Already set up before profile photos were added?
+
+Run `supabase/add-avatar.sql` once in Supabase → **SQL Editor → New query → Run**. Then add his photo under **⚙️ Setup → Kid's dashboard → 📷 Profile photo**.
+
 ---
 
 ## Make it live (about 20 minutes)
@@ -94,6 +98,7 @@ That's it. 🎉
 | Redeem a prize | **🎁 Prizes** → **Redeem** (only lights up when he has enough points) |
 | Fix a mistake from earlier | **📜 History** → 🗑️ next to the entry (this gives back or removes its points) |
 | Add/edit/remove behaviors | **⚙️ Setup** → ✏️ or **＋ Add behavior**, and pick **🏠 Home & School** or **🏅 Sports & Team** (⬆️ moves one up within its section) |
+| Add Jaylen's profile photo | **⚙️ Setup → Kid's dashboard → 📷 Profile photo** |
 | Add a prize with a photo | **🎁 Prizes** → **＋ Add prize** → **📷 Choose photo** (or edit a prize with ✏️) |
 
 **Duplicate protection:**
@@ -141,6 +146,7 @@ rewardrocket/
   js/kid.js             kid dashboard logic
   supabase/setup.sql    database setup (run once in the SQL Editor)
   supabase/add-sports.sql  one-time upgrade for databases made before the sports section
+  supabase/add-avatar.sql  one-time upgrade for databases made before profile photos
   vendor/               the Supabase JavaScript library (bundled, so no outside CDN is needed)
   icons/, manifest.webmanifest   home-screen icon
   netlify.toml          hosting settings

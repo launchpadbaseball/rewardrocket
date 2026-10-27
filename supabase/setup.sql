@@ -41,9 +41,12 @@ grant execute on function public.is_parent() to authenticated;
 create table if not exists public.settings (
   id         int primary key default 1 check (id = 1),
   kid_name   text not null default 'Jaylen',
+  avatar_url text,
   kid_token  uuid not null default gen_random_uuid()
 );
 insert into public.settings (id) values (1) on conflict do nothing;
+-- (For databases created before profile photos existed.)
+alter table public.settings add column if not exists avatar_url text;
 
 create table if not exists public.behaviors (
   id          uuid primary key default gen_random_uuid(),
@@ -183,6 +186,7 @@ language sql stable security definer set search_path = public
 as $$
   select case when s.kid_token is distinct from p_token then null else json_build_object(
     'kid_name',  s.kid_name,
+    'avatar_url', s.avatar_url,
     'balance',   (select coalesce(sum(points), 0) from public.ledger),
     'behaviors', coalesce((select json_agg(json_build_object(
                     'id', b.id, 'name', b.name, 'emoji', b.emoji,

@@ -5,7 +5,11 @@
 .k-head { display: flex; align-items: center; justify-content: space-between; color: #fff; margin: 8px 0 10px; }
 .k-hi { font-size: 30px; font-weight: 700; }
 .k-sub { font-size: 14px; opacity: .75; letter-spacing: 2px; text-transform: uppercase; }
-.k-planet { font-size: 54px; animation: spin 18s linear infinite; }
+.k-avatar { font-size: 54px; animation: spin 18s linear infinite; flex: none; }
+.k-avatar.photo { animation: none; position: relative; width: 92px; height: 92px; border-radius: 50%; padding: 4px;
+  background: conic-gradient(var(--yellow), var(--pink), var(--purple), var(--teal), var(--yellow)); box-shadow: 0 0 24px rgba(255, 210, 63, .45); }
+.k-avatar.photo img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 3px solid var(--space-2); }
+.k-avatar.photo::after { content: '🚀'; position: absolute; right: -6px; bottom: -4px; font-size: 30px; transform: rotate(-10deg); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Big star with the points */

@@ -172,6 +172,10 @@
   }
 
   const kidName = () => (state.settings && state.settings.kid_name) || 'Jaylen';
+  const avatarHtml = () => {
+    const url = state.settings && state.settings.avatar_url;
+    return `<span class="avatar">${url ? `<img src="${esc(url)}" alt="">` : '🧑‍🚀'}</span>`;
+  };
 
   function renderHero() {
     const st = stats(state.ledger);
@@ -188,7 +192,7 @@
         <div class="next" id="hero-next"></div>`;
       hero.dataset.ready = 1;
     }
-    hero.querySelector('.kid').textContent = kidName() + '’s balance';
+    hero.querySelector('.kid').innerHTML = avatarHtml() + `<span>${esc(kidName())}’s balance</span>`;
     RR.countTo($('#bal-num'), state.balance);
     $('#today-num').textContent = '+' + st.todayPts;
     $('#week-num').textContent = '+' + st.weekPts;
@@ -522,6 +526,9 @@
       <button class="icon-btn" data-edit-b="${b.id}" aria-label="Edit">✏️</button></li>`).join('')
       || '<li class="muted" style="display:block">None yet.</li>')).join('');
     if (!state.settings) return;
+    const url = state.settings.avatar_url;
+    $('#avatar-thumb').innerHTML = url ? `<img src="${esc(url)}" alt="">` : '🧑‍🚀';
+    $('#avatar-remove').hidden = !url;
     const nameInput = $('#kid-name');
     if (document.activeElement !== nameInput) nameInput.value = state.settings.kid_name;
     $('#kid-link').textContent = kidLink();
@@ -592,6 +599,40 @@
       if (error) { toast(friendly(error), { warn: true }); return; }
       s.close(); toast('Behavior deleted'); loadAll();
     });
+  }
+
+  // Profile photo: upload, save on the settings row, then tidy up the old file.
+  $('#avatar-file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    $('#avatar-thumb').textContent = '⏳';
+    try {
+      const url = await uploadImage(file);
+      await saveAvatar(url);
+    } catch (err) {
+      toast('Could not upload that photo: ' + friendly(err), { warn: true });
+      renderSetup();
+    }
+  });
+
+  $('#avatar-remove').addEventListener('click', async () => {
+    if (!await confirmSheet('Remove the profile photo?', 'The rocket icon shows instead.', 'Remove', 'red')) return;
+    saveAvatar(null);
+  });
+
+  async function saveAvatar(url) {
+    const old = state.settings.avatar_url;
+    const { error } = await db.from('settings').update({ avatar_url: url }).eq('id', 1);
+    if (error) {
+      if (url) removeImage(url);
+      toast(/avatar_url/.test(error.message) ? 'Run supabase/add-avatar.sql in Supabase first (see README).' : friendly(error), { warn: true });
+      renderSetup();
+      return;
+    }
+    if (old && old !== url) removeImage(old);
+    toast(url ? 'Profile photo saved 📸' : 'Photo removed');
+    loadAll();
   }
 
   $('#save-kid-name').addEventListener('click', async () => {
