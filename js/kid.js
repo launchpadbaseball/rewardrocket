@@ -96,10 +96,23 @@
 
     // Ways to earn
     const doneToday = new Set(recent.filter(r => r.kind === 'earn' && r.day === today).map(r => r.behavior_id));
-    $('#k-ways').innerHTML = behaviors.map(b => `<li class="${b.once_daily && doneToday.has(b.id) ? 'done' : ''}">
+    const way = b => `<li class="${b.once_daily && doneToday.has(b.id) ? 'done' : ''}">
       <span class="emo">${esc(b.emoji)}</span>
       <span class="grow"><b>${esc(b.name)}</b>${b.once_daily ? '<small>once a day</small>' : ''}</span>
-      <span class="pts-pill plus">+${b.points}</span></li>`).join('');
+      <span class="pts-pill plus">+${b.points}</span></li>`;
+    const sports = behaviors.filter(b => b.category === 'sports');
+    $('#k-ways').innerHTML = behaviors.filter(b => b.category !== 'sports').map(way).join('');
+    $('#k-sports').innerHTML = sports.map(way).join('');
+    $('#k-sports-card').hidden = !sports.length;
+
+    // Team points this week: earned from sports behaviors.
+    const sportIds = new Set(sports.map(b => b.id));
+    const wk = RR.weekStart().getTime();
+    const teamPts = recent.filter(r => r.kind === 'earn' && sportIds.has(r.behavior_id) && new Date(r.created_at).getTime() >= wk)
+      .reduce((a, r) => a + r.points, 0);
+    $('#k-team').innerHTML = teamPts
+      ? `You earned <b>${teamPts}</b> team points this week! Great teammates make great teams. 🙌`
+      : 'Hustle, be a great teammate and play with heart. That’s how you earn team points! 💪';
 
     // Recent
     const wins = recent.slice(0, 12);

@@ -7,7 +7,15 @@
 (() => {
   const { client: db, esc, $, $$, localDay, stats, nextPrize, pct, toast, confetti, signed } = RR;
 
-  const EMOJIS = ['⭐', '🎒', '📚', '👂', '🤝', '🧹', '💛', '🧘', '🌙', '🏫', '🏆', '🦷', '🛏️', '🍽️', '🐶', '📖', '🎹', '⚽', '🏀', '⚾', '🧺', '🚿', '😊', '🙏'];
+  const EMOJIS = ['⭐', '🎒', '📚', '👂', '🤝', '🧹', '💛', '🧘', '🌙', '🏫', '🦷', '🛏️', '🍽️', '🐶', '📖', '🎹', '🧺', '🚿', '😊', '🙏',
+    '🏆', '⚾', '⚽', '🏀', '🏈', '🧤', '🙌', '💨', '📣', '💪', '🧢', '👏', '🏃', '🥅'];
+  // Behaviors are shown in two sections. Sports is about his approach to the game, not results.
+  const GROUPS = [
+    { key: 'home', title: '🏠 Home & School' },
+    { key: 'sports', title: '🏅 Sports & Team', note: 'Effort & attitude, not the score' }
+  ];
+  const catOf = b => b.category === 'sports' ? 'sports' : 'home';
+  const grouped = () => GROUPS.map(g => ({ ...g, items: state.behaviors.filter(b => catOf(b) === g.key) }));
   const PRIZE_EMOJIS = ['🎁', '🧸', '🟣', '🌈', '🍦', '🎮', '📺', '🍕', '🎟️', '🧩', '🪀', '🦖', '🚗', '📚', '🍫', '🌟'];
   const HISTORY_DAYS = 35;   // loaded up front; older entries via "Load older"
   const REPEAT_WARN_MS = 90 * 1000;
@@ -196,18 +204,22 @@
 
   function renderTiles() {
     const box = $('#tiles');
-    if (!state.behaviors.length) { box.innerHTML = '<div class="card empty" style="grid-column:1/-1">No behaviors yet. Add some in ⚙️ Setup.</div>'; return; }
-    box.innerHTML = state.behaviors.map(b => {
-      const n = todayEarns(b.id).length;
-      const done = b.once_daily && n > 0;
-      const tag = done ? '✓ Done today' : b.once_daily ? 'Once a day' : n ? `✓ ${n}× today` : 'Any time';
-      return `<button class="tile${done ? ' done' : ''}" data-b="${b.id}">
-        <span class="pts">+${b.points}</span>
-        <span class="emo">${esc(b.emoji)}</span>
-        <span class="nm">${esc(b.name)}</span>
-        <span class="tag">${tag}</span>
-      </button>`;
-    }).join('');
+    if (!state.behaviors.length) { box.innerHTML = '<div class="card empty">No behaviors yet. Add some in ⚙️ Setup.</div>'; return; }
+    box.innerHTML = grouped().filter(g => g.items.length).map(g => `
+      <div class="section-title">${g.title} <small>${g.note || 'Tap to award'}</small></div>
+      <div class="tiles ${g.key}">${g.items.map(tileHtml).join('')}</div>`).join('');
+  }
+
+  function tileHtml(b) {
+    const n = todayEarns(b.id).length;
+    const done = b.once_daily && n > 0;
+    const tag = done ? '✓ Done today' : b.once_daily ? 'Once a day' : n ? `✓ ${n}× today` : 'Any time';
+    return `<button class="tile${done ? ' done' : ''}" data-b="${b.id}">
+      <span class="pts">+${b.points}</span>
+      <span class="emo">${esc(b.emoji)}</span>
+      <span class="nm">${esc(b.name)}</span>
+      <span class="tag">${tag}</span>
+    </button>`;
   }
 
   $('#tiles').addEventListener('click', e => {
@@ -258,21 +270,18 @@
     loadAll();
   }
 
-  // ----- Bonus / deduct
-  $('#btn-bonus').addEventListener('click', () => adjustSheet(+1));
-  $('#btn-deduct').addEventListener('click', () => adjustSheet(-1));
+  // ----- Bonus points (the app only ever adds points; prizes are the only thing that spends them)
+  $('#btn-bonus').addEventListener('click', bonusSheet);
 
-  function adjustSheet(sign) {
-    const reasons = sign > 0
-      ? ['Extra helpful', 'Great attitude', 'Tried something hard', 'Helped a sibling', 'Correction']
-      : ['Not listening', 'Disrespectful', 'Didn’t do chores', 'Screen time rule', 'Correction'];
-    const s = sheet(`<h3>${sign > 0 ? '➕ Bonus points' : '➖ Take away points'}</h3>
+  function bonusSheet() {
+    const reasons = ['Extra helpful', 'Great attitude', 'Tried something hard', 'Helped a sibling', 'Above and beyond'];
+    const s = sheet(`<h3>🌟 Bonus points</h3>
       <label class="field"><span>How many points?</span>
-        <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" name="amt" type="number" inputmode="numeric" min="1" value="${sign > 0 ? 2 : 2}"><button type="button" data-step="1">+</button></div></label>
+        <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" name="amt" type="number" inputmode="numeric" min="1" value="2"><button type="button" data-step="1">+</button></div></label>
       <label class="field"><span>Reason</span><input class="input" name="reason" maxlength="80" placeholder="Why?"></label>
       <div class="chips">${reasons.map(r => `<button type="button" class="chip" data-reason="${esc(r)}">${esc(r)}</button>`).join('')}</div>
       <p class="err"></p>
-      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn ${sign > 0 ? 'green' : 'red'}" data-save>${sign > 0 ? 'Add points' : 'Take away'}</button></div>`);
+      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn green" data-save>Add points</button></div>`);
     stepper(s.el);
     s.el.querySelectorAll('[data-reason]').forEach(c => c.addEventListener('click', () => {
       s.el.querySelector('[name=reason]').value = c.dataset.reason;
@@ -285,13 +294,13 @@
       if (!reason) { s.err('Add a short reason so you both know why.'); return; }
       btn.disabled = true;
       const { data, error } = await db.from('ledger').insert({
-        day: localDay(), kind: 'adjust', points: sign * amt, reason, emoji: sign > 0 ? '🌟' : '⚠️'
+        day: localDay(), kind: 'adjust', points: amt, reason, emoji: '🌟'
       }).select().single();
       btn.disabled = false;
       if (error) { s.err(friendly(error)); return; }
       s.close();
-      if (sign > 0) confetti();
-      toast(`${signed(sign * amt)} points · ${reason}`, { action: { label: 'Undo', run: () => undo(data) } });
+      confetti();
+      toast(`+${amt} points · ${reason}`, { action: { label: 'Undo', run: () => undo(data) } });
       loadAll();
     });
   }
@@ -439,7 +448,7 @@
       <span class="b" style="height:${Math.round(st.perDay[d] / max * 100)}%"></span>
       <span class="d">${d === today ? 'Today' : RR.shortDay(d)}</span></div>`).join('');
     $('#summary').innerHTML = `<div><b>+${st.weekPts}</b><span>earned this week</span></div>
-      <div><b>−${st.weekLost}</b><span>taken away</span></div>
+      <div><b>${st.weekAwards}</b><span>awards this week</span></div>
       <div><b>${st.weekRedeemed}</b><span>prizes this week</span></div>`;
 
     const rows = state.ledger.filter(r => state.filter === 'all' || r.kind === state.filter);
@@ -479,7 +488,7 @@
     const r = state.ledger.find(x => x.id === b.dataset.delRow);
     const msg = r.kind === 'redeem'
       ? `This gives back ${-r.points} points (use it if the prize was redeemed by mistake).`
-      : `This ${r.points > 0 ? 'takes away' : 'gives back'} ${Math.abs(r.points)} points and removes it from the history.`;
+      : `Only for fixing a mistake: removes this entry and its ${Math.abs(r.points)} points.`;
     if (!await confirmSheet(`Remove “${r.reason}”?`, msg, 'Remove', 'red')) return;
     const { error } = await db.from('ledger').delete().eq('id', r.id);
     if (error) { toast(friendly(error), { warn: true }); return; }
@@ -505,12 +514,13 @@
   }
 
   function renderSetup() {
-    $('#behavior-admin').innerHTML = state.behaviors.map((b, i) => `<li>
+    $('#behavior-admin').innerHTML = grouped().map(g => `<li class="day-head" style="border:0;padding-bottom:0">${g.title}</li>` +
+      (g.items.map((b, i) => `<li>
       <span class="emo">${esc(b.emoji)}</span>
       <span class="grow"><b>${esc(b.name)}</b><small>+${b.points} pts · ${b.once_daily ? 'once a day' : 'any time'}</small></span>
-      <button class="icon-btn" data-move="${i}" data-dir="-1" aria-label="Move up" ${i === 0 ? 'disabled style="opacity:.3"' : ''}>⬆️</button>
+      <button class="icon-btn" data-move="${b.id}" aria-label="Move up" ${i === 0 ? 'disabled style="opacity:.3"' : ''}>⬆️</button>
       <button class="icon-btn" data-edit-b="${b.id}" aria-label="Edit">✏️</button></li>`).join('')
-      || '<li class="empty" style="display:block">No behaviors yet.</li>';
+      || '<li class="muted" style="display:block">None yet.</li>')).join('');
     if (!state.settings) return;
     const nameInput = $('#kid-name');
     if (document.activeElement !== nameInput) nameInput.value = state.settings.kid_name;
@@ -523,9 +533,12 @@
     if (ed) { behaviorSheet(state.behaviors.find(b => b.id === ed.dataset.editB)); return; }
     const mv = e.target.closest('[data-move]');
     if (!mv) return;
-    const i = +mv.dataset.move, j = i + +mv.dataset.dir;
-    const list = state.behaviors.slice();
-    [list[i], list[j]] = [list[j], list[i]];
+    // Move up within its own section, then renumber everything section by section.
+    const groups = grouped().map(g => g.items);
+    const items = groups.find(g => g.some(b => b.id === mv.dataset.move));
+    const i = items.findIndex(b => b.id === mv.dataset.move);
+    [items[i - 1], items[i]] = [items[i], items[i - 1]];
+    const list = groups.flat();
     state.behaviors = list;
     renderSetup(); renderTiles();
     const results = await Promise.all(list.map((b, k) => b.sort === k + 1 ? null : db.from('behaviors').update({ sort: k + 1 }).eq('id', b.id)));
@@ -537,12 +550,14 @@
 
   function behaviorSheet(b) {
     const isNew = !b;
-    b = b || { name: '', emoji: '⭐', points: 3, once_daily: true };
-    let emoji = b.emoji;
+    b = b || { name: '', emoji: '⭐', points: 3, once_daily: true, category: 'home' };
+    let emoji = b.emoji, category = catOf(b);
     const s = sheet(`<h3>${isNew ? '⭐ New behavior' : '✏️ Edit behavior'}</h3>
       <label class="field"><span>What did he do?</span><input class="input" name="name" maxlength="60" value="${esc(b.name)}" placeholder="e.g. Made his bed"></label>
       <label class="field"><span>Points</span>
         <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" name="points" type="number" inputmode="numeric" min="1" value="${b.points}"><button type="button" data-step="1">+</button></div></label>
+      <div class="field"><span style="display:block;font-weight:600;font-size:14px;margin-bottom:6px">Section</span>
+        <div class="chips">${GROUPS.map(g => `<button type="button" class="chip" data-cat="${g.key}">${g.title}</button>`).join('')}</div></div>
       <label class="toggle"><span><b>Once a day</b><small>Blocks a second award on the same day</small></span>
         <span class="switch"><input type="checkbox" name="once" ${b.once_daily ? 'checked' : ''}><i></i></span></label>
       <div class="field"><span style="display:block;font-weight:600;font-size:14px">Icon</span>
@@ -554,6 +569,9 @@
     if (!EMOJIS.includes(emoji)) s.el.querySelector('.emoji-row').insertAdjacentHTML('afterbegin', `<button type="button" data-emoji="${esc(emoji)}">${esc(emoji)}</button>`);
     s.el.querySelectorAll('[data-emoji]').forEach(x => x.addEventListener('click', () => { emoji = x.dataset.emoji; paint(); }));
     paint();
+    const paintCat = () => s.el.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('on', x.dataset.cat === category));
+    s.el.querySelectorAll('[data-cat]').forEach(x => x.addEventListener('click', () => { category = x.dataset.cat; paintCat(); }));
+    paintCat();
     s.on('[data-save]', async btn => {
       const name = s.el.querySelector('[name=name]').value.trim();
       const points = parseInt(s.el.querySelector('[name=points]').value, 10);
@@ -561,8 +579,8 @@
       if (!name) { s.err('Give it a name.'); return; }
       if (!(points > 0)) { s.err('Points must be at least 1.'); return; }
       btn.disabled = true;
-      const row = { name, points, once_daily, emoji };
-      if (isNew) row.sort = state.behaviors.length + 1;
+      const row = { name, points, once_daily, emoji, category };
+      if (isNew) row.sort = Math.max(0, ...state.behaviors.map(x => x.sort)) + 1;
       const { error } = isNew ? await db.from('behaviors').insert(row) : await db.from('behaviors').update(row).eq('id', b.id);
       btn.disabled = false;
       if (error) { s.err(friendly(error)); return; }

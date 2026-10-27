@@ -81,12 +81,8 @@
       <!-- AWARD -->
       <section data-tab="award">
         <div class="card hero" id="hero"></div>
-        <div class="section-title">Tap to award <small>Tap a mistake? Hit Undo.</small></div>
-        <div class="tiles" id="tiles"></div>
-        <div class="actions-row">
-          <button class="btn green" id="btn-bonus">➕ Bonus points</button>
-          <button class="btn red" id="btn-deduct">➖ Take away</button>
-        </div>
+        <div id="tiles"></div>
+        <button class="btn green block" id="btn-bonus" style="margin-bottom:16px">🌟 Bonus points</button>
       </section>
 
       <!-- PRIZES -->
@@ -111,7 +107,7 @@
           <div class="chips" id="filters">
             <button class="chip on" data-f="all">All</button>
             <button class="chip" data-f="earn">Earned</button>
-            <button class="chip" data-f="adjust">Bonus / taken</button>
+            <button class="chip" data-f="adjust">Bonus</button>
             <button class="chip" data-f="redeem">Prizes</button>
           </div>
           <div id="history"></div>

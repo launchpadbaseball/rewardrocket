@@ -51,9 +51,14 @@ create table if not exists public.behaviors (
   emoji       text not null default '⭐',
   points      int  not null check (points > 0),
   once_daily  boolean not null default true,   -- can only be earned once per day
+  category    text not null default 'home' check (category in ('home', 'sports')),
   sort        int  not null default 0,
   created_at  timestamptz not null default now()
 );
+
+-- (For databases created before the sports section existed.)
+alter table public.behaviors add column if not exists category text not null default 'home'
+  check (category in ('home', 'sports'));
 
 create table if not exists public.rewards (
   id          uuid primary key default gen_random_uuid(),
@@ -181,7 +186,8 @@ as $$
     'balance',   (select coalesce(sum(points), 0) from public.ledger),
     'behaviors', coalesce((select json_agg(json_build_object(
                     'id', b.id, 'name', b.name, 'emoji', b.emoji,
-                    'points', b.points, 'once_daily', b.once_daily
+                    'points', b.points, 'once_daily', b.once_daily,
+                    'category', b.category
                   ) order by b.sort, b.created_at) from public.behaviors b), '[]'::json),
     'rewards',   coalesce((select json_agg(json_build_object(
                     'id', r.id, 'name', r.name, 'emoji', r.emoji,
@@ -254,10 +260,23 @@ select * from (values
   ('Showing kindness',                   '💛', 3, false, 6),
   ('Handled frustration well',           '🧘', 3, false, 7),
   ('Bedtime routine',                    '🌙', 2, true,  8),
-  ('Good behavior at school',            '🏫', 4, true,  9),
-  ('Good sportsmanship',                 '🏆', 5, false, 10)
+  ('Good behavior at school',            '🏫', 4, true,  9)
 ) v(name, emoji, points, once_daily, sort)
 where not exists (select 1 from public.behaviors);
+
+-- Sports & Team: his approach to the game, not how well he played.
+insert into public.behaviors (name, emoji, points, once_daily, sort, category)
+select v.*, 'sports' from (values
+  ('Good sportsmanship',                 '🏆', 5, false, 101),
+  ('Extra practice on his own',          '⚾', 3, true,  102),
+  ('Being a great teammate',             '🙌', 3, false, 103),
+  ('Full effort & hustle',               '💨', 3, false, 104),
+  ('Listened to the coach',              '📣', 3, false, 105),
+  ('Bounced back from a mistake',        '💪', 3, false, 106),
+  ('Ready for practice on time',         '🧢', 2, true,  107),
+  ('Respected umps, refs & opponents',   '👏', 3, false, 108)
+) v(name, emoji, points, once_daily, sort)
+where not exists (select 1 from public.behaviors where category = 'sports');
 
 insert into public.rewards (name, emoji, cost, sort)
 select * from (values

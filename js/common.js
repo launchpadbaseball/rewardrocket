@@ -56,19 +56,18 @@ const RR = (() => {
     const wk = weekStart().getTime();
     const days = last7();
     const perDay = Object.fromEntries(days.map(d => [d, 0]));
-    let todayPts = 0, weekPts = 0, weekLost = 0, weekRedeemed = 0;
+    let todayPts = 0, weekPts = 0, weekAwards = 0, weekRedeemed = 0;
     for (const r of rows) {
       const inWeek = new Date(r.created_at).getTime() >= wk;
       const gained = r.points > 0;
       if (gained && r.day === today) todayPts += r.points;
       if (gained && r.day in perDay) perDay[r.day] += r.points;
       if (inWeek) {
-        if (gained) weekPts += r.points;
+        if (gained) { weekPts += r.points; weekAwards += 1; }
         else if (r.kind === 'redeem') weekRedeemed += 1;
-        else weekLost += -r.points;
       }
     }
-    return { todayPts, weekPts, weekLost, weekRedeemed, perDay, days };
+    return { todayPts, weekPts, weekAwards, weekRedeemed, perDay, days };
   }
 
   // The cheapest prize he can't afford yet (or null if he can afford them all).

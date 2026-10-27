@@ -60,3 +60,9 @@
 .kid-page .prize .nm { font-size: 16px; }
 .kid-page .prize .left { font-size: 13px; }
 .kid-page .prize .badge { font-size: 11px; padding: 4px 8px; }
+
+/* Sports & Team card */
+.k-sports { border-top: 8px solid var(--teal); }
+.k-sports .pts-pill.plus { background: #ddf7fa; color: #0b7f8c; }
+.k-team { margin: -4px 0 6px; font-size: 16px; }
+.k-team b { color: var(--teal); font-size: 20px; }

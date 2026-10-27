@@ -123,10 +123,14 @@ img { max-width: 100%; display: block; }
 .tile.done { background: #e9fbf2; border-color: var(--green); }
 .tile.done .pts { background: var(--green); color: #fff; }
 .tile.done .tag { color: #138a52; font-weight: 600; }
+/* Sports tiles get a teal accent so the section stands out */
+.tiles.sports .tile { border-top: 6px solid var(--teal); }
+.tiles.sports .tile .pts { background: var(--teal); color: #fff; }
+.tiles.sports .tile.done { border-color: var(--green); }
+.tiles.sports .tile.done .pts { background: var(--green); }
 .tile.pop { animation: pop .45s ease; }
 @keyframes pop { 30% { transform: scale(1.08) rotate(-2deg); } 60% { transform: scale(.97); } }
 
-.actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 
 /* ---------- Buttons ---------- */
 .btn {

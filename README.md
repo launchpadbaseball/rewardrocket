@@ -2,10 +2,22 @@
 
 A points-and-prizes app for Jaylen. Mom and Dad each sign in from their own phones and share one account. Jaylen gets his own view-only dashboard.
 
-- **Parent app** (`index.html`): award points in one tap, add bonus points or take points away (with a reason), redeem prizes, see history and weekly progress, and edit behaviors and prizes.
+- **Parent app** (`index.html`): award points in one tap, add bonus points (with a reason), redeem prizes, see history and weekly progress, and edit behaviors and prizes.
 - **Kid dashboard** (`kid.html#…`): points, a rocket progress track toward his next prize, his week, prizes, ways to earn points, and celebrations when he earns points or unlocks a prize. It is view-only.
 
+**Points only go up.** Parents add points; the only thing that spends them is redeeming a prize. (A mistaken award can still be undone.)
+
+**Two sections of behaviors:**
+- **🏠 Home & School:** getting ready, homework, chores, kindness and so on.
+- **🏅 Sports & Team:** his *approach* to the game, not his stats: sportsmanship, extra practice, being a great teammate, hustle, listening to the coach, bouncing back from mistakes, being ready on time, and respecting umps, refs and opponents.
+
 **How it's built:** plain HTML, CSS and JavaScript with no build step. **Supabase** (free tier) provides the database, logins, prize-photo storage and live sync. **Netlify** (free tier) hosts the site.
+
+---
+
+## Already set up before the Sports section was added?
+
+Run `supabase/add-sports.sql` once in Supabase → **SQL Editor → New query → Run**. It adds the sports section and 7 starter sports behaviors, and moves "Good sportsmanship" into it. Nothing you've earned or set up is changed. (New installs don't need this; `setup.sql` already includes it.)
 
 ---
 
@@ -78,15 +90,15 @@ That's it. 🎉
 | You want to… | Do this |
 |---|---|
 | Award points | **🚀 Award** tab → tap the behavior. Mis-tapped? Tap **Undo** in the pop-up. |
-| Give a bonus / take points away | **➕ Bonus points** or **➖ Take away** → amount → reason |
+| Give bonus points | **🌟 Bonus points** → amount → reason |
 | Redeem a prize | **🎁 Prizes** → **Redeem** (only lights up when he has enough points) |
 | Fix a mistake from earlier | **📜 History** → 🗑️ next to the entry (this gives back or removes its points) |
-| Add/edit/remove behaviors | **⚙️ Setup** → ✏️ or **＋ Add behavior** (⬆️ moves one up the list) |
+| Add/edit/remove behaviors | **⚙️ Setup** → ✏️ or **＋ Add behavior**, and pick **🏠 Home & School** or **🏅 Sports & Team** (⬆️ moves one up within its section) |
 | Add a prize with a photo | **🎁 Prizes** → **＋ Add prize** → **📷 Choose photo** (or edit a prize with ✏️) |
 
 **Duplicate protection:**
-- Behaviors marked **Once a day** (ready for school, homework, chores, bedtime and good behavior at school) can only be earned once per day. The tile turns green with ✓ Done today. The database enforces this, so it holds even if both of you tap at the same moment.
-- "Any time" behaviors (kindness, respect, and so on) can be earned several times a day. If one is tapped again within 90 seconds, the app asks "Award again?" first.
+- Behaviors marked **Once a day** (for example homework, chores, bedtime and extra practice) can only be earned once per day. The tile turns green with ✓ Done today. The database enforces this, so it holds even if both of you tap at the same moment.
+- "Any time" behaviors (kindness, respect, hustle, being a great teammate, and so on) can be earned several times a day. If one is tapped again within 90 seconds, the app asks "Award again?" first.
 - You can switch any behavior between **Once a day** and **Any time** in Setup.
 
 **Sync:** changes show up on the other parent's phone within a second or two. The **● Live** dot in the corner shows the connection is up. Jaylen's dashboard refreshes every 15 seconds.
@@ -128,6 +140,7 @@ rewardrocket/
   js/parent.js          parent app logic
   js/kid.js             kid dashboard logic
   supabase/setup.sql    database setup (run once in the SQL Editor)
+  supabase/add-sports.sql  one-time upgrade for databases made before the sports section
   vendor/               the Supabase JavaScript library (bundled, so no outside CDN is needed)
   icons/, manifest.webmanifest   home-screen icon
   netlify.toml          hosting settings
