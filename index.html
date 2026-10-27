@@ -81,6 +81,7 @@
       <!-- AWARD -->
       <section data-tab="award">
         <div class="card hero" id="hero"></div>
+        <button class="card j-banner" id="journal-banner" hidden></button>
         <div id="tiles"></div>
         <button class="btn green block" id="btn-bonus" style="margin-bottom:16px">🌟 Bonus points</button>
       </section>
@@ -93,6 +94,13 @@
           <h2>🎁 Prizes redeemed</h2>
           <ul class="list" id="redeemed"></ul>
         </div>
+      </section>
+
+      <!-- JOURNAL -->
+      <section data-tab="journal" hidden>
+        <div class="section-title"><span id="journal-title">💬 Journal</span> <small>How he’s feeling</small></div>
+        <div class="card"><h2>🌈 Moods this week</h2><div class="mood-week" id="journal-week"></div></div>
+        <div id="journal-list"></div>
       </section>
 
       <!-- HISTORY -->
@@ -133,6 +141,8 @@
           </div>
           <label class="field"><span>Name</span>
             <div class="stepper"><input class="input" id="kid-name" maxlength="30" style="text-align:left;font-size:16px;font-weight:600"><button class="btn sm" id="save-kid-name" style="width:auto">Save</button></div></label>
+          <label class="field" id="journal-points-row" hidden><span>📝 Points for sharing his day (0 = off)</span>
+            <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" id="journal-points" type="number" inputmode="numeric" min="0" max="50"><button type="button" data-step="1">+</button><button class="btn sm" id="save-journal-points">Save</button></div></label>
           <p class="muted" style="margin:0 0 10px">A view-only page for him: points, prizes and progress. It can't change anything. Open it on his tablet and add it to the home screen.</p>
           <code class="box" id="kid-link"></code>
           <div class="btns" style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
@@ -156,6 +166,7 @@
       <div class="in">
         <button data-go="award" class="on"><span>🚀</span>Award</button>
         <button data-go="prizes"><span>🎁</span>Prizes</button>
+        <button data-go="journal"><span>💬</span>Journal<i class="dot" id="journal-dot" hidden></i></button>
         <button data-go="history"><span>📜</span>History</button>
         <button data-go="setup"><span>⚙️</span>Setup</button>
       </div>

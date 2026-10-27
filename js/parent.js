@@ -27,6 +27,8 @@
     rewards: [],
     ledger: [],       // newest first
     redeemed: [],
+    journal: [],          // newest day first
+    journalMissing: false, // true until supabase/add-journal.sql has been run
     balance: 0,
     tab: 'award',
     filter: 'all',
@@ -122,13 +124,14 @@
 
   async function loadAll() {
     const since = new Date(); since.setDate(since.getDate() - HISTORY_DAYS);
-    const [s, b, r, l, bal, red] = await Promise.all([
+    const [s, b, r, l, bal, red, jr] = await Promise.all([
       db.from('settings').select('*').eq('id', 1).maybeSingle(),
       db.from('behaviors').select('*').order('sort').order('created_at'),
       db.from('rewards').select('*').order('cost').order('sort'),
       db.from('ledger').select('*').gte('created_at', since.toISOString()).order('created_at', { ascending: false }).limit(1000),
       db.rpc('balance'),
-      db.from('ledger').select('*').eq('kind', 'redeem').order('created_at', { ascending: false }).limit(50)
+      db.from('ledger').select('*').eq('kind', 'redeem').order('created_at', { ascending: false }).limit(50),
+      db.from('journal').select('*').order('day', { ascending: false }).limit(60)
     ]);
     const err = [s, b, r, l, bal, red].find(x => x.error);
     if (err) { toast(friendly(err.error), { warn: true }); return; }
@@ -142,6 +145,9 @@
     state.ledger = l.data.concat(older);
     state.redeemed = red.data;
     state.balance = bal.data;
+    // The journal is optional: an older database without it still works.
+    state.journalMissing = !!jr.error;
+    state.journal = jr.error ? [] : jr.data;
     render();
   }
 
@@ -152,7 +158,7 @@
   function subscribe() {
     if (channel) return;
     channel = db.channel('family');
-    ['ledger', 'behaviors', 'rewards', 'settings'].forEach(table =>
+    ['ledger', 'behaviors', 'rewards', 'settings', 'journal'].forEach(table =>
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, reloadSoon));
     channel.subscribe(status => {
       const live = status === 'SUBSCRIBED';
@@ -168,7 +174,7 @@
 
   // ---------------------------------------------------------------- render
   function render() {
-    renderHero(); renderTiles(); renderPrizes(); renderHistory(); renderSetup();
+    renderHero(); renderTiles(); renderPrizes(); renderHistory(); renderSetup(); renderJournal();
   }
 
   const kidName = () => (state.settings && state.settings.kid_name) || 'Jaylen';
@@ -455,7 +461,7 @@
       <div><b>${st.weekAwards}</b><span>awards this week</span></div>
       <div><b>${st.weekRedeemed}</b><span>prizes this week</span></div>`;
 
-    const rows = state.ledger.filter(r => state.filter === 'all' || r.kind === state.filter);
+    const rows = state.ledger.filter(r => state.filter === 'all' || r.kind === state.filter || (state.filter === 'earn' && r.kind === 'journal'));
     if (!rows.length) { $('#history').innerHTML = '<p class="empty">Nothing here yet.</p>'; }
     else {
       let html = '', day = null;
@@ -529,6 +535,9 @@
     const url = state.settings.avatar_url;
     $('#avatar-thumb').innerHTML = url ? `<img src="${esc(url)}" alt="">` : '🧑‍🚀';
     $('#avatar-remove').hidden = !url;
+    const jp = $('#journal-points');
+    $('#journal-points-row').hidden = !('journal_points' in state.settings);
+    if (document.activeElement !== jp) jp.value = state.settings.journal_points;
     const nameInput = $('#kid-name');
     if (document.activeElement !== nameInput) nameInput.value = state.settings.kid_name;
     $('#kid-link').textContent = kidLink();
@@ -635,6 +644,15 @@
     loadAll();
   }
 
+  stepper($('#journal-points-row'), 0);
+  $('#save-journal-points').addEventListener('click', async () => {
+    const n = parseInt($('#journal-points').value, 10);
+    if (!(n >= 0 && n <= 50)) { toast('Pick 0 to 50 points.'); return; }
+    const { error } = await db.from('settings').update({ journal_points: n }).eq('id', 1);
+    if (error) { toast(friendly(error), { warn: true }); return; }
+    toast(n ? `He’ll earn +${n} for sharing his day 📝` : 'Journal points turned off'); loadAll();
+  });
+
   $('#save-kid-name').addEventListener('click', async () => {
     const name = $('#kid-name').value.trim();
     if (!name) return;
@@ -655,13 +673,87 @@
     toast('New link ready 🔄'); loadAll();
   });
 
+  // ---------------------------------------------------------------- journal
+  const store = {
+    get(k) { try { return localStorage.getItem('rr.' + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem('rr.' + k, v); } catch { /* private mode */ } }
+  };
+  const newestJournal = () => state.journal.reduce((m, j) => j.updated_at > m ? j.updated_at : m, '');
+  const journalUnread = () => !!state.journal.length && newestJournal() > (store.get('journalSeen') || '');
+  const QUICK_REPLIES = ['So proud of you! ⭐', 'Love you, buddy! ❤️', 'Thanks for telling us 🤗', 'Let’s talk about it tonight 💬', 'That made us smile! 😄'];
+
+  function renderJournal() {
+    if (state.tab === 'journal' && state.journal.length) store.set('journalSeen', newestJournal());
+    const unread = journalUnread();
+    $('#journal-dot').hidden = !unread;
+    const latest = state.journal[0];
+    $('#journal-banner').hidden = !unread;
+    if (unread) $('#journal-banner').innerHTML = `<span class="emo">${RR.mood(latest.mood).emoji}</span>
+      <span class="grow"><b>${esc(kidName())} wrote about his day</b><small>Tap to read it 📝</small></span><span>›</span>`;
+
+    $('#journal-title').textContent = `💬 ${kidName()}’s journal`;
+    if (state.journalMissing) {
+      $('#journal-week').innerHTML = '';
+      $('#journal-list').innerHTML = `<div class="card"><b>One quick step:</b> run <code>supabase/add-journal.sql</code> in Supabase’s SQL Editor to turn on the journal (see the README).</div>`;
+      return;
+    }
+
+    // Mood strip for the last 7 days
+    const byDay = Object.fromEntries(state.journal.map(j => [j.day, j]));
+    const today = localDay();
+    $('#journal-week').innerHTML = RR.last7().map(d => `<div class="mood-day${d === today ? ' today' : ''}">
+      <span class="m">${byDay[d] ? RR.mood(byDay[d].mood).emoji : '·'}</span><span class="d">${d === today ? 'Today' : RR.shortDay(d)}</span></div>`).join('');
+
+    $('#journal-list').innerHTML = state.journal.length ? state.journal.map(j => {
+      const m = RR.mood(j.mood);
+      return `<article class="card j-entry mood-${esc(j.mood)}">
+        <div class="j-head"><span class="j-mood">${m.emoji}</span>
+          <span class="grow"><b>Feeling ${esc(m.label.toLowerCase())}</b><small>${RR.dayLabel(j.day)} · ${RR.timeOf(j.updated_at)}</small></span></div>
+        ${j.prompt ? `<p class="j-prompt">💭 ${esc(j.prompt)}</p>` : ''}
+        <p class="j-body">${j.body ? esc(j.body) : '<span class="muted">(Just a feeling today, no words.)</span>'}</p>
+        ${j.parent_reply
+          ? `<div class="j-reply"><small>💌 ${esc((j.replied_by || 'You').split('@')[0])} wrote back</small><p>${esc(j.parent_reply)}</p>
+               <button class="btn sm ghost" data-reply="${j.id}">✏️ Edit reply</button></div>`
+          : `<button class="btn sm pink" data-reply="${j.id}">💌 Write back</button>`}
+      </article>`;
+    }).join('') : `<div class="card empty">Nothing yet. When ${esc(kidName())} writes about his day on his dashboard, it shows up here.</div>`;
+  }
+
+  $('#journal-banner').addEventListener('click', () => goTab('journal'));
+
+  $('#journal-list').addEventListener('click', e => {
+    const b = e.target.closest('[data-reply]');
+    if (!b) return;
+    const j = state.journal.find(x => x.id === b.dataset.reply);
+    const s = sheet(`<h3>💌 Write back to ${esc(kidName())}</h3>
+      <p class="muted" style="margin-top:0">He’ll see this on his dashboard with a little celebration.</p>
+      <label class="field"><textarea class="input" name="reply" rows="3" maxlength="500" placeholder="Your message…">${esc(j.parent_reply || '')}</textarea></label>
+      <div class="chips">${QUICK_REPLIES.map(r => `<button type="button" class="chip" data-quick="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+      <p class="err"></p>
+      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn pink" data-save>Send 💌</button></div>`);
+    const box = s.el.querySelector('[name=reply]');
+    s.el.querySelectorAll('[data-quick]').forEach(c => c.addEventListener('click', () => {
+      box.value = box.value.trim() ? box.value.trim() + ' ' + c.dataset.quick : c.dataset.quick;
+    }));
+    s.on('[data-save]', async btn => {
+      const reply = box.value.trim();
+      btn.disabled = true;
+      const { error } = await db.from('journal').update({ parent_reply: reply || null, replied_by: reply ? state.user.email : null }).eq('id', j.id);
+      btn.disabled = false;
+      if (error) { s.err(friendly(error)); return; }
+      s.close(); toast(reply ? 'Sent 💌' : 'Reply removed'); loadAll();
+    });
+  });
+
   // ---------------------------------------------------------------- tabs
-  $$('.nav [data-go]').forEach(btn => btn.addEventListener('click', () => {
-    state.tab = btn.dataset.go;
-    $$('.nav [data-go]').forEach(b => b.classList.toggle('on', b === btn));
-    $$('[data-tab]').forEach(sec => { sec.hidden = sec.dataset.tab !== state.tab; });
+  function goTab(name) {
+    state.tab = name;
+    $$('.nav [data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === name));
+    $$('[data-tab]').forEach(sec => { sec.hidden = sec.dataset.tab !== name; });
     window.scrollTo({ top: 0 });
-  }));
+    if (name === 'journal') renderJournal();
+  }
+  $$('.nav [data-go]').forEach(btn => btn.addEventListener('click', () => goTab(btn.dataset.go)));
 
   // ---------------------------------------------------------------- sheets
   function sheet(html) {
@@ -693,10 +785,10 @@
     });
   }
 
-  function stepper(root) {
+  function stepper(root, min = 1) {
     root.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => {
       const input = b.parentElement.querySelector('input');
-      input.value = Math.max(1, (parseInt(input.value, 10) || 0) + parseInt(b.dataset.step, 10));
+      input.value = Math.max(min, (parseInt(input.value, 10) || 0) + parseInt(b.dataset.step, 10));
     }));
   }
 })();

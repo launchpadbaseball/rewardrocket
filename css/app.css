@@ -241,10 +241,12 @@ label.field > span { display: block; font-weight: 600; font-size: 14px; margin-b
   background: rgba(255,255,255,.97); box-shadow: 0 -6px 24px rgba(10,6,50,.25);
   padding: 6px 8px calc(6px + var(--safe-b)); display: flex; justify-content: center;
 }
-.nav .in { display: grid; grid-template-columns: repeat(4, 1fr); width: 100%; max-width: 640px; }
+.nav .in { display: grid; grid-template-columns: repeat(5, 1fr); width: 100%; max-width: 640px; }
 .nav button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 16px; font-size: 12px; font-weight: 600; color: var(--muted); min-height: 56px; justify-content: center; }
 .nav button span { font-size: 24px; line-height: 1; transition: transform .2s; }
 .nav button.on { color: var(--purple); background: var(--soft); }
+.nav button { position: relative; }
+.nav .dot { position: absolute; top: 6px; right: calc(50% - 20px); width: 12px; height: 12px; border-radius: 50%; background: var(--pink); border: 2px solid #fff; }
 .nav button.on span { transform: translateY(-2px) scale(1.12); }
 
 /* ---------- Bottom sheet ---------- */
@@ -292,3 +294,29 @@ code.box { display: block; background: var(--soft); padding: 10px 12px; border-r
 
 /* A real button inside a stepper row (e.g. Save next to the kid's name) */
 .stepper button.btn { width: auto; background: var(--purple); color: #fff; font-size: 15px; padding: 0 18px; }
+
+/* ---------- Journal ---------- */
+.j-banner { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px 16px; border: 3px solid var(--pink); }
+.j-banner .emo { font-size: 32px; }
+.j-banner .grow { flex: 1; }
+.j-banner b { display: block; }
+.j-banner small { color: var(--muted); }
+.j-banner > span:last-child { font-size: 28px; color: var(--pink); }
+.mood-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+.mood-day .m { display: flex; align-items: center; justify-content: center; height: 44px; font-size: 28px; background: var(--soft); border-radius: 14px; color: var(--muted); }
+.mood-day .d { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+.mood-day.today .m { outline: 3px solid var(--yellow); }
+.j-entry { border-left: 8px solid var(--green); }
+.j-entry.mood-okay { border-left-color: var(--yellow); }
+.j-entry.mood-sad, .j-entry.mood-worried { border-left-color: var(--teal); }
+.j-entry.mood-frustrated { border-left-color: var(--orange); }
+.j-head { display: flex; align-items: center; gap: 12px; }
+.j-head .j-mood { font-size: 40px; line-height: 1; }
+.j-head .grow b { display: block; font-size: 17px; }
+.j-head .grow small { color: var(--muted); }
+.j-prompt { color: var(--muted); font-style: italic; margin: 12px 0 6px; }
+.j-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; margin: 0 0 12px; }
+.j-reply { background: #fff0f7; border-radius: 14px; padding: 10px 12px; }
+.j-reply small { color: #c2185b; font-weight: 600; }
+.j-reply p { margin: 4px 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+textarea.input { resize: vertical; min-height: 96px; line-height: 1.4; }

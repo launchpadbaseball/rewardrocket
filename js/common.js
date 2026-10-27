@@ -147,5 +147,54 @@ const RR = (() => {
     el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
   }
 
-  return { client, configured, esc, $, $$, localDay, weekStart, last7, dayLabel, shortDay, timeOf, signed, stats, nextPrize, pct, toast, confetti, starfield, countTo };
+  // ----- Journal: moods and the question of the day
+  const MOODS = [
+    { key: 'awesome', emoji: '🤩', label: 'Awesome' },
+    { key: 'good', emoji: '😊', label: 'Good' },
+    { key: 'okay', emoji: '😐', label: 'Okay' },
+    { key: 'sad', emoji: '😢', label: 'Sad' },
+    { key: 'frustrated', emoji: '😤', label: 'Frustrated' },
+    { key: 'worried', emoji: '😟', label: 'Worried' }
+  ];
+  const mood = key => MOODS.find(m => m.key === key) || { key, emoji: '💭', label: key };
+
+  const PROMPTS = [
+    'What was the best part of your day?',
+    'What made you laugh today?',
+    'Who was kind to you today? Who were you kind to?',
+    'What is something hard you did today?',
+    'If today was a movie, what would it be called?',
+    'What is one thing you learned today?',
+    'What are you looking forward to tomorrow?',
+    'What is something you are proud of today?',
+    'Was anything frustrating today? What helped you feel better?',
+    'What is one thing you would do differently today?',
+    'Who did you play with today? What did you do?',
+    'What made you feel happy today?',
+    'What is something you are thankful for today?',
+    'How did you help someone today?',
+    'What is something new you tried today?',
+    'What was your favorite part of practice or your last game?',
+    'If you had a superpower tomorrow, what would it be and why?',
+    'Is there something you want Mom and Dad to know?',
+    'Rate your day from 1 to 10. Why that number?',
+    'What was the hardest part of your day?',
+    'What is a goal you want to work on this week?',
+    'Tell us about a good choice you made today.',
+    'What would make tomorrow awesome?',
+    'Did anything worry you today? Tell us about it.',
+    'What was the funniest thing that happened at school?',
+    'Who is someone you want to say thank you to? Why?',
+    'What did you do today that took courage?',
+    'If you were the teacher today, what would you teach?',
+    'What helped you feel calm today?',
+    'How were you a good teammate or friend today?'
+  ];
+  // Same question all day, a different one tomorrow (based on the date).
+  const promptFor = ymd => {
+    const [Y, M, D] = ymd.split('-').map(Number);
+    return PROMPTS[Math.floor(Date.UTC(Y, M - 1, D) / 864e5) % PROMPTS.length];
+  };
+
+  return { MOODS, mood, promptFor, client, configured, esc, $, $$, localDay, weekStart, last7, dayLabel, shortDay, timeOf, signed, stats, nextPrize, pct, toast, confetti, starfield, countTo };
 })();

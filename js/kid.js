@@ -117,6 +117,8 @@
       ? `You earned <b>${teamPts}</b> team points this week! Great teammates make great teams. 🙌`
       : 'Hustle, be a great teammate and play with heart. That’s how you earn team points! 💪';
 
+    renderJournal();
+
     // Recent
     const wins = recent.slice(0, 12);
     $('#k-recent').innerHTML = wins.length ? wins.map(r => `<li>
@@ -125,6 +127,108 @@
       <span class="pts-pill ${r.kind === 'redeem' ? 'prize' : r.points > 0 ? 'plus' : 'minus'}">${signed(r.points)}</span></li>`).join('')
       : '<li class="empty" style="display:block">Your wins will show up here! 🌟</li>';
   }
+
+  // ----- Journal: how he's feeling + the question of the day
+  // While he's writing, the 15-second refresh leaves the form alone, and the
+  // draft is kept on the device so closing the app doesn't lose it.
+  let jEditing = false;
+  const jToday = () => (data.journal || []).find(j => j.day === localDay());
+  const draftKey = () => 'draft.' + localDay();
+  const journalPaidToday = () => data.recent.some(r => r.kind === 'journal' && r.day === localDay());
+
+  function renderJournal() {
+    const box = $('#k-j');
+    if (!('journal' in data)) { $('#k-journal').hidden = true; return; }  // database not upgraded yet
+    $('#k-journal').hidden = false;
+    const today = jToday();
+    if (jEditing && box.querySelector('form')) return;  // don't disturb him mid-sentence
+    if (!today || jEditing) { jEditing = true; box.innerHTML = journalForm(today); wireForm(box); }
+    else box.innerHTML = journalDone(today);
+    box.insertAdjacentHTML('beforeend', pastEntries());
+  }
+
+  function journalForm(today) {
+    let draft = {};
+    try { draft = JSON.parse(store.get(draftKey()) || '{}'); } catch { /* ignore */ }
+    const moodNow = draft.mood || (today && today.mood) || '';
+    const body = draft.body != null ? draft.body : (today ? today.body : '');
+    return `<form class="k-j-form">
+      <p class="k-j-q">💭 ${esc(RR.promptFor(localDay()))}</p>
+      ${data.journal_points > 0 && !journalPaidToday() ? `<p class="k-j-earn">⭐ Earn +${data.journal_points} points for sharing your day!</p>` : ''}
+      <p class="k-j-label">How are you feeling?</p>
+      <div class="mood-grid">${RR.MOODS.map(m => `<button type="button" class="mood-btn${m.key === moodNow ? ' on' : ''}" data-mood="${m.key}">
+        <span>${m.emoji}</span>${m.label}</button>`).join('')}</div>
+      <textarea class="input" name="body" rows="4" maxlength="1000" placeholder="Write your answer here…">${esc(body)}</textarea>
+      <p class="err"></p>
+      <button class="btn pink block" type="submit" ${moodNow ? '' : 'disabled'}>🚀 Send to Mom &amp; Dad</button>
+      ${today ? '<button type="button" class="btn ghost block" data-cancel style="margin-top:8px">Never mind</button>' : ''}
+    </form>`;
+  }
+
+  function wireForm(box) {
+    const form = box.querySelector('form');
+    let moodNow = (form.querySelector('.mood-btn.on') || {}).dataset?.mood || '';
+    const saveDraft = () => store.set(draftKey(), JSON.stringify({ mood: moodNow, body: form.body.value }));
+    form.querySelectorAll('[data-mood]').forEach(b => b.addEventListener('click', () => {
+      moodNow = b.dataset.mood;
+      form.querySelectorAll('[data-mood]').forEach(x => x.classList.toggle('on', x === b));
+      form.querySelector('[type=submit]').disabled = false;
+      saveDraft();
+    }));
+    form.body.addEventListener('input', saveDraft);
+    const cancel = form.querySelector('[data-cancel]');
+    if (cancel) cancel.addEventListener('click', () => { jEditing = false; store.set(draftKey(), ''); renderJournal(); });
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = form.querySelector('[type=submit]');
+      btn.disabled = true; btn.textContent = 'Sending… 🚀';
+      const { data: saved, error } = await db.rpc('kid_save_journal', {
+        p_token: token, p_day: localDay(), p_mood: moodNow, p_prompt: RR.promptFor(localDay()), p_body: form.body.value.trim()
+      });
+      if (error) {
+        form.querySelector('.err').textContent = /Failed to fetch|Load failed|NetworkError/i.test(error.message)
+          ? 'No internet right now. Try again in a minute — your words are saved.' : error.message;
+        btn.disabled = false; btn.textContent = '🚀 Send to Mom & Dad';
+        return;
+      }
+      data.journal = [saved].concat((data.journal || []).filter(j => j.day !== saved.day));
+      store.set(draftKey(), '');
+      jEditing = false;
+      renderJournal();
+      // Points earned: reload so the balance updates and the "+2 points!" party shows.
+      if (saved.points_awarded) load();
+      else confetti(['💛', '⭐', '✨', RR.mood(saved.mood).emoji], 30);
+    });
+  }
+
+  function journalDone(j) {
+    const m = RR.mood(j.mood);
+    const hard = ['sad', 'frustrated', 'worried'].includes(j.mood);
+    return `<div class="k-j-done">
+      <div class="k-j-sent">✅ Sent to Mom &amp; Dad!</div>
+      <div class="k-j-mood">${m.emoji}<span>Feeling ${esc(m.label.toLowerCase())}</span></div>
+      ${j.body ? `<p class="k-j-text">${esc(j.body)}</p>` : ''}
+      <p class="k-j-note">${hard ? 'Thanks for telling us how you feel. We love you, always. ❤️' : 'Thanks for sharing your day! 💛'}</p>
+      ${j.parent_reply ? `<div class="j-reply"><small>💌 Mom &amp; Dad wrote back</small><p>${esc(j.parent_reply)}</p></div>` : ''}
+      <button class="btn ghost block" data-edit-journal>✏️ Change my answer</button>
+    </div>`;
+  }
+
+  function pastEntries() {
+    const past = (data.journal || []).filter(j => j.day !== localDay()).slice(0, 5);
+    if (!past.length) return '';
+    return `<p class="k-j-label" style="margin-top:18px">Earlier days</p><ul class="list">${past.map(j => `<li style="align-items:flex-start">
+      <span class="emo">${RR.mood(j.mood).emoji}</span>
+      <span class="grow"><b>${RR.dayLabel(j.day)}</b>${j.body ? `<small class="k-j-past">${esc(j.body)}</small>` : ''}
+      ${j.parent_reply ? `<small class="k-j-past-reply">💌 ${esc(j.parent_reply)}</small>` : ''}</span></li>`).join('')}</ul>`;
+  }
+
+  $('#k-j').addEventListener('click', e => {
+    if (!e.target.closest('[data-edit-journal]')) return;
+    jEditing = true;
+    $('#k-j').innerHTML = '';
+    renderJournal();
+  });
 
   // ----- Celebrations: new points since he last looked, and newly unlocked prizes
   const queue = [];
@@ -145,6 +249,16 @@
       unlockedNow.filter(r => !unlockedBefore.has(r.id)).forEach(r =>
         queue.push({ emoji: r.emoji, image: r.image_url, title: 'Prize unlocked! 🔓', body: `You have enough points for ${r.name}! Ask Mom or Dad.`, big: true }));
     }
+
+    // A new (or changed) reply from Mom or Dad.
+    let replies = {};
+    try { replies = JSON.parse(store.get('replies') || '{}'); } catch { /* ignore */ }
+    const journal = data.journal || [];
+    if (!first || store.get('seen')) {
+      journal.filter(j => j.parent_reply && replies[j.id] !== j.parent_reply).slice(0, 2).forEach(j =>
+        queue.push({ emoji: '💌', title: 'Mom & Dad wrote back!', body: j.parent_reply }));
+    }
+    store.set('replies', JSON.stringify(Object.fromEntries(journal.filter(j => j.parent_reply).map(j => [j.id, j.parent_reply]))));
 
     store.set('seen', JSON.stringify(data.recent.map(r => r.id)));
     store.set('unlocked', JSON.stringify(unlockedNow.map(r => r.id)));

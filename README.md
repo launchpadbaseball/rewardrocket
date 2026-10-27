@@ -11,6 +11,11 @@ A points-and-prizes app for Jaylen. Mom and Dad each sign in from their own phon
 - **🏠 Home & School:** getting ready, homework, chores, kindness and so on.
 - **🏅 Sports & Team:** his *approach* to the game, not his stats: sportsmanship, extra practice, being a great teammate, hustle, listening to the coach, bouncing back from mistakes, being ready on time, and respecting umps, refs and opponents.
 
+**📝 My Day journal:**
+- **Jaylen's side:** every day his dashboard asks a new question ("What made you laugh today?"). He picks how he's feeling (🤩 😊 😐 😢 😤 😟), writes an answer and sends it. He earns **+2 points** the first time each day he sends an answer with writing in it; you can change or turn off the amount in **⚙️ Setup**.
+- **Your side:** his entries show up in the **💬 Journal** tab, with a pink dot and a banner on the Award screen when there's something new. You can write back, and he gets a "Mom & Dad wrote back!" celebration.
+- **Limits:** his dashboard can only write his own journal entry for today. It can't change points, prizes or anything else.
+
 **How it's built:** plain HTML, CSS and JavaScript with no build step. **Supabase** (free tier) provides the database, logins, prize-photo storage and live sync. **Netlify** (free tier) hosts the site.
 
 ---
@@ -18,6 +23,10 @@ A points-and-prizes app for Jaylen. Mom and Dad each sign in from their own phon
 ## Already set up before the Sports section was added?
 
 Run `supabase/add-sports.sql` once in Supabase → **SQL Editor → New query → Run**. It adds the sports section and 7 starter sports behaviors, and moves "Good sportsmanship" into it. Nothing you've earned or set up is changed. (New installs don't need this; `setup.sql` already includes it.)
+
+## Already set up before the journal was added?
+
+Run `supabase/add-journal.sql` once in Supabase → **SQL Editor → New query → Run**. Nothing you've earned or set up is changed.
 
 ## Already set up before profile photos were added?
 
@@ -98,6 +107,8 @@ That's it. 🎉
 | Redeem a prize | **🎁 Prizes** → **Redeem** (only lights up when he has enough points) |
 | Fix a mistake from earlier | **📜 History** → 🗑️ next to the entry (this gives back or removes its points) |
 | Add/edit/remove behaviors | **⚙️ Setup** → ✏️ or **＋ Add behavior**, and pick **🏠 Home & School** or **🏅 Sports & Team** (⬆️ moves one up within its section) |
+| Read Jaylen's journal / write back | **💬 Journal** → **💌 Write back** |
+| Change journal points | **⚙️ Setup → Kid's dashboard → 📝 Points for sharing his day** |
 | Add Jaylen's profile photo | **⚙️ Setup → Kid's dashboard → 📷 Profile photo** |
 | Add a prize with a photo | **🎁 Prizes** → **＋ Add prize** → **📷 Choose photo** (or edit a prize with ✏️) |
 
@@ -116,7 +127,7 @@ That's it. 🎉
 
 - All data is stored in your Supabase database, so nothing is lost when you refresh or switch phones.
 - The database only lets in the emails listed in the `parents` table. Everyone else sees nothing, even with a valid login.
-- Jaylen's link contains a long random secret. It can **only read** a summary and can't change anything. If the link ever gets shared by accident, tap **🔄 New link** in Setup and the old link stops working.
+- Jaylen's link contains a long random secret. It can read his summary and write **only his own journal entry for today**. It can't change points, prizes or anything else. Anyone holding his link could read his recent journal entries, so treat it like a key. If the link ever gets shared by accident, tap **🔄 New link** in Setup and the old link stops working.
 - Prize photos are stored with hard-to-guess file names. Anyone holding a photo's exact link could view that photo.
 
 ## Changing who can sign in
@@ -147,6 +158,7 @@ rewardrocket/
   supabase/setup.sql    database setup (run once in the SQL Editor)
   supabase/add-sports.sql  one-time upgrade for databases made before the sports section
   supabase/add-avatar.sql  one-time upgrade for databases made before profile photos
+  supabase/add-journal.sql one-time upgrade for databases made before the journal
   vendor/               the Supabase JavaScript library (bundled, so no outside CDN is needed)
   icons/, manifest.webmanifest   home-screen icon
   netlify.toml          hosting settings
