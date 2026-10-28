@@ -229,13 +229,17 @@
 
     // Dugout: check-ins waiting for approval, a new postgame interview, the next prize.
     const cards = [];
-    todayRequests().forEach(q => {
-      const b = state.behaviors.find(x => x.id === q.behavior_id);
-      if (!b) return;
-      cards.push(RR.dcard({ color: 'yellow', kicker: 'Pending approval', ic: 'clock', title: b.name,
-        body: `Checked in ${RR.timeOf(q.created_at)} · +${b.points} XP`,
-        acts: `<button class="btn sm ink" data-approve="${b.id}">Approve</button><button class="btn sm clear" data-decline="${q.id}">Decline</button>` }));
-    });
+    const reqs = todayRequests().map(q => ({ q, b: state.behaviors.find(x => x.id === q.behavior_id) })).filter(x => x.b);
+    if (reqs.length) {
+      const total = reqs.reduce((a, x) => a + x.b.points, 0);
+      cards.push(RR.dcard({ color: 'yellow wide', kicker: 'Pending approval', ic: 'clock',
+        title: `${reqs.length} check-in${reqs.length === 1 ? '' : 's'}`,
+        body: `+${total} XP waiting<div class="dlist">${reqs.map(({ q, b }) => `<div class="drow">
+            <div><b>${esc(b.name)}</b><small>${RR.timeOf(q.created_at)} · +${b.points} XP</small></div>
+            <button class="rbtn ok" data-approve="${b.id}" aria-label="Approve ${esc(b.name)}">${icon('check')}</button>
+            <button class="rbtn" data-decline="${q.id}" aria-label="Decline ${esc(b.name)}">${icon('x')}</button></div>`).join('')}</div>`,
+        acts: reqs.length > 1 ? `<button class="btn sm ink block" data-approve-all>Approve all · +${total} XP</button>` : '' }));
+    }
     if (journalUnread()) {
       const j = state.journal[0], md = RR.mood(j.mood);
       cards.push(RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: `Feeling ${md.label.toLowerCase()} ${md.emoji}`,
@@ -293,14 +297,23 @@
 
   // ---------------------------------------------------------------- awarding
   const busy = new Set();
-  async function award(id, row) {
+  // quiet: used by "Approve all" (no repeat check, no toast). Returns the XP awarded.
+  async function award(id, row, quiet = false) {
     const b = state.behaviors.find(x => x.id === id);
-    if (!b || busy.has(id)) return;
+    if (!b || busy.has(id)) return 0;
     const today = localDay();
     const earns = state.ledger.filter(r => r.kind === 'earn' && r.behavior_id === id && r.day === today);
-    if (b.once_daily && earns.length) { toast(`${b.name}: already completed today.`); return; }
-    if (!b.once_daily && earns.length && Date.now() - new Date(earns[0].created_at).getTime() < REPEAT_WARN_MS) {
-      if (!await confirmSheet('Award again?', `“${b.name}” was awarded a moment ago. Give another +${b.points} XP?`, 'Award again')) return;
+    const clearRequest = () => {
+      const req = todayRequests().find(q => q.behavior_id === b.id);
+      if (req) { db.from('lineup_requests').delete().eq('id', req.id).then(() => {}); state.requests = state.requests.filter(q => q !== req); }
+    };
+    if (b.once_daily && earns.length) {
+      clearRequest(); render();
+      if (!quiet) toast(`${b.name}: already completed today.`);
+      return 0;
+    }
+    if (!quiet && !b.once_daily && earns.length && Date.now() - new Date(earns[0].created_at).getTime() < REPEAT_WARN_MS) {
+      if (!await confirmSheet('Award again?', `“${b.name}” was awarded a moment ago. Give another +${b.points} XP?`, 'Award again')) return 0;
     }
     busy.add(id);
     if (row) { row.classList.remove('pop'); void row.offsetWidth; row.classList.add('pop'); }
@@ -311,19 +324,31 @@
     }).select().single();
     busy.delete(id);
     if (error) {
-      if (error.code === '23505') toast(`${b.name}: already completed today (maybe the other parent just did it).`);
+      if (error.code === '23505') { clearRequest(); if (!quiet) toast(`${b.name}: already completed today (maybe the other parent just did it).`); }
       else toast(friendly(error), { warn: true });
       loadAll();
-      return;
+      return 0;
     }
-    // A check-in for this item is now settled.
-    const req = todayRequests().find(q => q.behavior_id === b.id);
-    if (req) { db.from('lineup_requests').delete().eq('id', req.id).then(() => {}); state.requests = state.requests.filter(q => q !== req); }
+    clearRequest();   // a check-in for this item is now settled
     state.ledger.unshift(data);
     state.balance += b.points;
     if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + b.points, tasks_completed: state.stats.tasks_completed + 1 };
     render();
-    announce(before, model(), `+${b.points} XP · ${b.name}`, () => undo(data));
+    if (!quiet) announce(before, model(), `+${b.points} XP · ${b.name}`, () => undo(data));
+    return b.points;
+  }
+
+  async function approveAll(btn) {
+    const ids = todayRequests().map(q => q.behavior_id);
+    if (!ids.length) return;
+    btn.disabled = true;
+    const before = model();
+    let xp = 0;
+    for (const id of ids) xp += await award(id, null, true);
+    const after = model();
+    if (after.level.idx > before.level.idx) burst(60);
+    toast(`Approved ${ids.length} check-in${ids.length === 1 ? '' : 's'} · +${xp} XP` + (after.level.idx > before.level.idx ? ` · Level up: ${after.level.name}` : ''));
+    loadAll();
   }
 
   // Toast for an award, plus level-ups and prizes that just unlocked.
@@ -754,13 +779,14 @@
 
   // One listener for every tappable thing inside the app.
   $('#screen-app').addEventListener('click', e => {
-    const t = e.target.closest('[data-go],[data-manage],[data-award],[data-approve],[data-decline],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-bonus],[data-edit-b],[data-move]');
+    const t = e.target.closest('[data-go],[data-manage],[data-award],[data-approve-all],[data-approve],[data-decline],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-bonus],[data-edit-b],[data-move]');
     if (!t) return;
     const d = t.dataset;
     if (t.id === 'manage-back') { goTab(state.prevTab); return; }
     if (d.go) goTab(d.go);
     else if (d.manage) { goTab('manage'); $('#manage-lineup').scrollIntoView(); }
     else if (d.award) award(d.award, t);
+    else if ('approveAll' in d) approveAll(t);
     else if (d.approve) award(d.approve, null);
     else if (d.decline) decline(d.decline);
     else if (d.redeem) redeem(d.redeem, t);

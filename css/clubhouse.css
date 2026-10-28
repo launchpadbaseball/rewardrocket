@@ -118,7 +118,7 @@ button.brand:active { opacity: .8; }
 .club { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 14px;
   grid-template-areas: "card xp" "bar bar" "dugout dugout" "tabs tabs"; align-items: start; }
 .a-card { grid-area: card; }
-.a-xp { grid-area: xp; align-self: stretch; }
+.a-xp { grid-area: xp; }
 .a-bar { grid-area: bar; }
 .a-dugout { grid-area: dugout; min-width: 0; }
 .a-tabs { grid-area: tabs; min-width: 0; }
@@ -128,12 +128,14 @@ button.brand:active { opacity: .8; }
 .club.has-q { grid-template-areas: "card xp" "q q" "bar bar" "dugout dugout" "tabs tabs"; }
 .a-q { grid-area: q; min-width: 0; }
 @media (min-width: 900px) {
-  .club.has-q { grid-template-areas: "card xp dugout" "card q dugout" "card bar dugout" "card tabs dugout"; }
+  .club.has-q { grid-template-areas: "card xp dugout" "card q dugout" "card bar dugout" "card tabs dugout" "card . dugout"; grid-template-rows: auto auto auto auto 1fr; }
 }
 @media (min-width: 900px) {
   .wrap { max-width: 1180px; padding-left: 28px; padding-right: 28px; }
   .club { grid-template-columns: 280px minmax(0, 1fr) 320px; gap: 22px;
-    grid-template-areas: "card xp dugout" "card bar dugout" "card tabs dugout"; }
+    grid-template-areas: "card xp dugout" "card bar dugout" "card tabs dugout" "card . dugout";
+    /* Rows hug their content; a tall Dugout only grows the empty last row. */
+    grid-template-rows: auto auto auto 1fr; }
   .a-card { position: sticky; top: 16px; }
   .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -223,7 +225,8 @@ button.brand:active { opacity: .8; }
 .dcard .k { display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
 .dcard .k .ico { width: 14px; height: 14px; }
 .dcard h4 { margin: 2px 0 0; font-family: var(--display); font-weight: 800; font-size: 23px; line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; padding-right: 30px; }
-.dcard p { margin: 0; font-size: 13px; line-height: 1.35; opacity: .8; overflow-wrap: anywhere; }
+.dcard .dbody { margin: 0; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; color: rgba(18, 18, 18, .8); }
+.dcard.dark .dbody { color: var(--text-2); }
 .dcard .go { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%; background: rgba(0, 0, 0, .1); display: flex; align-items: center; justify-content: center; }
 .dcard .acts { display: flex; gap: 8px; margin-top: auto; padding-top: 6px; }
 .dcard .btn.ink { background: #121212; color: #fff; }
@@ -580,3 +583,16 @@ textarea.input { resize: vertical; min-height: 96px; line-height: 1.45; }
 .tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .lu-act.wide { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 11px 8px; font-size: 12.5px; border-radius: 11px; }
 .lu-act.wide .ico { width: 15px; height: 15px; stroke-width: 3; }
+
+/* Check-ins listed inside one Dugout card */
+.dcard.wide { flex-basis: 88%; }
+.dlist { margin-top: 8px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
+@media (min-width: 900px) { .dlist { max-height: 420px; } }
+.dugout { align-items: flex-start; }
+.drow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(0, 0, 0, .12); }
+.drow b { display: block; font-size: 14px; font-weight: 700; line-height: 1.2; color: #121212; overflow-wrap: anywhere; }
+.drow small { display: block; font-size: 12px; opacity: .7; }
+.rbtn { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .1); color: #121212; }
+.rbtn.ok { background: #121212; color: #fff; }
+.rbtn .ico { width: 17px; height: 17px; stroke-width: 2.8; }
+.dcard .btn.block { width: 100%; }

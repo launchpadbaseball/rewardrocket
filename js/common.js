@@ -518,7 +518,7 @@ const RR = (() => {
     const tag = attrs.includes('data-') && !acts ? 'button' : 'div';
     return `<${tag} class="dcard ${color}" ${attrs}>
       <span class="k">${ic ? icon(ic) : ''}${esc(kicker)}</span>
-      <h4>${esc(title)}</h4>${body ? `<p>${body}</p>` : ''}
+      <h4>${esc(title)}</h4>${body ? `<div class="dbody">${body}</div>` : ''}
       ${tag === 'button' ? `<span class="go">${icon('right', 'sm')}</span>` : ''}
       ${thumb}${meter !== null ? `<div class="meter thin" style="${thumb ? 'margin-right:72px' : ''}"><i style="width:${meter}%"></i></div>` : ''}
       ${acts ? `<div class="acts">${acts}</div>` : ''}</${tag}>`;
