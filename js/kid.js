@@ -55,39 +55,65 @@
     const mode = m.canRequest ? 'kid-can-request' : 'kid';
 
     // Clubhouse
-    $('#k-card').innerHTML = RR.playerCard(m);
-    const bal = $('#k-card .js-bal');
+    $('#k-card').innerHTML = RR.baseballCard(m);
+    $('#k-xp').innerHTML = RR.xpHero(m);
+    const bal = $('#k-xp .js-bal');
     if (shownBalance !== null && shownBalance !== m.balance) { bal.dataset.v = shownBalance; RR.countTo(bal, m.balance); }
     shownBalance = m.balance;
+    $('#k-bar').innerHTML = RR.xpBar(m);
+
+    // Dugout: today's postgame question, check-ins waiting, the latest reply, the next prize.
+    const cards = [];
     const answered = (data.journal || []).some(j => j.day === localDay());
-    $('#k-alerts').innerHTML = 'journal' in data && !answered
-      ? `<button class="alert" data-postgame>${icon('mic')}<span class="grow"><b>Postgame Interview</b>
-          <small>Today’s question is up${data.journal_points > 0 && !journalPaidToday() ? ` · +${data.journal_points} XP` : ''}</small></span>${icon('right', 'sm')}</button>` : '';
+    if ('journal' in data && !answered) {
+      cards.push(RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: 'Today’s question',
+        body: esc(RR.promptFor(localDay())) + (data.journal_points > 0 && !journalPaidToday() ? ` <b>+${data.journal_points} XP</b>` : ''), attrs: 'data-postgame' }));
+    }
+    const waiting = m.lineup.filter(b => b.status === 'pending');
+    if (waiting.length) {
+      cards.push(RR.dcard({ color: 'yellow', kicker: 'Pending approval', ic: 'clock', title: `${waiting.length} waiting`,
+        body: esc(waiting.map(b => b.name).join(', ')) + '. A parent will approve them.', attrs: 'data-go="lineup"' }));
+    }
+    const reply = (data.journal || []).find(j => j.parent_reply);
+    if (reply) cards.push(RR.dcard({ color: 'peach', kicker: 'From Mom & Dad', ic: 'message', title: 'Coach’s note', body: esc(reply.parent_reply) }));
+    cards.push(RR.ondeckCard(m));
+    const live = (('journal' in data && !answered) ? 1 : 0) + waiting.length;
+    $('#k-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>to do</small></span></div>
+      <div class="dugout">${cards.join('')}</div>`;
+
+    // Tabbed card: today's lineup, scoreboard, highlights.
     const open = m.lineup.filter(b => b.status !== 'done').sort((a, b) => (a.status === 'pending') - (b.status === 'pending'));
-    $('#k-lineup').innerHTML = `<div class="panel">${RR.lineupSummary(m)}</div>` +
-      (open.length ? `<div class="lineup" style="margin-top:12px">${open.slice(0, 4).map(b => RR.lineupRow(b, mode, true)).join('')}</div>`
-        : '<p class="muted" style="margin:10px 2px 0">Daily lineup complete. Great work today.</p>');
-    $('#k-stats').innerHTML = RR.statGrid(m);
-    $('#k-unlock').innerHTML = RR.nextUnlock(m);
-    $('#k-highlights').innerHTML = RR.highlights(m);
+    const lineupPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm dark" data-go="lineup">All ${m.lineup.length}</button></div>` +
+      (open.length ? RR.tiles(open.slice(0, 6), mode, true) : '<p class="empty">Daily lineup complete. Great work today.</p>');
+    $('#k-tabs').innerHTML = RR.tabcard('club', [
+      { key: 'lineup', label: 'Today’s Lineup', html: lineupPane },
+      { key: 'score', label: 'Scoreboard', html: RR.scoreboard(m) + '<div style="margin-top:12px">' + RR.statGrid(m) + '</div>' },
+      { key: 'high', label: 'Highlights', html: RR.highlights(m) }
+    ]);
 
     // Lineup
     $('#k-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-    $('#k-summary').innerHTML = `<span class="label" style="margin-bottom:8px">Completed today</span>` + RR.lineupSummary(m) +
-      `<p class="muted" style="margin:10px 0 0;font-size:13px">+${m.todayXP} XP today${m.canRequest ? ' · Did something? Tap “I did it” and a parent will approve it.' : ''}</p>`;
-    $('#k-groups').innerHTML = RR.lineupGroups(m, mode);
+    $('#k-summary').innerHTML = `<div class="pane-head" style="margin:0">${RR.diamond(m)}
+      <div style="text-align:right"><span class="label">Today</span><b class="num" style="font-size:28px;color:var(--gold)">+${fmt(m.todayXP)}</b></div></div>
+      ${m.canRequest ? '<p class="muted" style="margin:10px 0 0;font-size:13px">Did something? Tap “I did it” and a parent will approve it.</p>' : ''}`;
+    const cat = c => m.lineup.filter(b => b.cat === c);
+    $('#k-groups').innerHTML = RR.tabcard('lineup', [
+      { key: 'home', label: `Home & School · ${cat('home').length}`, html: RR.tiles(cat('home'), mode) },
+      { key: 'sports', label: `On the Field · ${cat('sports').length}`, html: RR.tiles(cat('sports'), mode) }
+    ]);
     renderJournal();
 
     // Prize Locker
     $('#k-bal').textContent = fmt(m.balance);
+    $('#k-ondeck').innerHTML = RR.ondeck(m);
     $('#k-locker').innerHTML = m.rewards.map(r => RR.lockerItem(r, m.balance, 'kid')).join('')
       || '<div class="panel empty" style="grid-column:1/-1">The locker is being stocked.</div>';
 
     // Stats
-    $('#k-box').innerHTML = RR.boxScore(m);
+    $('#k-box').innerHTML = RR.scoreboard(m);
     $('#k-season').innerHTML = RR.statGrid(m, true);
     $('#k-trophies').innerHTML = RR.trophyCase(m);
-    $('#k-ladder').innerHTML = RR.ladder(m);
+    $('#k-ladder').innerHTML = RR.basepath(m);
     $('#k-log').innerHTML = RR.gameLogRows(m.recent.slice(0, 25));
   }
 
@@ -249,6 +275,7 @@
     window.scrollTo({ top: 0 });
   }
 
+  RR.wireUI($('#k-app'));
   $('#k-app').addEventListener('click', e => {
     const t = e.target.closest('[data-go],[data-request],[data-postgame],[data-edit-journal]');
     if (!t) return;

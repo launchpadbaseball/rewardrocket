@@ -28,7 +28,7 @@
     tab: 'clubhouse',
     prevTab: 'clubhouse',
     filter: 'all',
-    logLimit: 30,       // game log rows shown; "Show more" raises it
+    logLimit: 15,       // game log rows shown; "Show more" raises it
     olderDone: false
   };
 
@@ -221,51 +221,57 @@
   }
 
   function renderClubhouse(m) {
-    $('#c-card').innerHTML = RR.playerCard(m);
-    const bal = $('#c-card .js-bal');
+    $('#c-card').innerHTML = RR.baseballCard(m);
+    $('#c-xp').innerHTML = RR.xpHero(m);
+    const bal = $('#c-xp .js-bal');
     if (shownBalance !== null && shownBalance !== m.balance) { bal.dataset.v = shownBalance; RR.countTo(bal, m.balance); }
+    $('#c-bar').innerHTML = RR.xpBar(m);
 
-    // Alerts: check-ins waiting for approval, and a new postgame interview.
-    const reqs = todayRequests();
-    let alerts = '';
-    if (reqs.length) {
-      alerts += `<div class="panel" style="margin-top:12px;border-color:rgba(255,176,32,.5)">
-        <h3 style="display:flex;align-items:center;gap:8px;color:var(--amber)">${icon('clock')}Pending Approval</h3>
-        ${reqs.map(q => {
-          const b = state.behaviors.find(x => x.id === q.behavior_id);
-          if (!b) return '';
-          return `<div class="req"><div><b>${esc(b.name)}</b><small>Checked in ${RR.timeOf(q.created_at)} · +${b.points} XP</small></div>
-            <button class="btn sm green" data-approve="${b.id}">Approve</button>
-            <button class="btn sm ghost" data-decline="${q.id}" aria-label="Decline">${icon('x', 'sm')}</button></div>`;
-        }).join('')}</div>`;
-    }
+    // Dugout: check-ins waiting for approval, a new postgame interview, the next prize.
+    const cards = [];
+    todayRequests().forEach(q => {
+      const b = state.behaviors.find(x => x.id === q.behavior_id);
+      if (!b) return;
+      cards.push(RR.dcard({ color: 'yellow', kicker: 'Pending approval', ic: 'clock', title: b.name,
+        body: `Checked in ${RR.timeOf(q.created_at)} · +${b.points} XP`,
+        acts: `<button class="btn sm ink" data-approve="${b.id}">Approve</button><button class="btn sm clear" data-decline="${q.id}">Decline</button>` }));
+    });
     if (journalUnread()) {
-      const j = state.journal[0];
-      alerts += `<button class="alert" data-open-journal>${icon('mic')}
-        <span class="grow"><b>New postgame interview</b><small>${esc(kidName())} is feeling ${esc(RR.mood(j.mood).label.toLowerCase())} ${RR.mood(j.mood).emoji}. Tap to read and reply.</small></span>${icon('right', 'sm')}</button>`;
+      const j = state.journal[0], md = RR.mood(j.mood);
+      cards.push(RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: `Feeling ${md.label.toLowerCase()} ${md.emoji}`,
+        body: esc(j.body ? (j.body.length > 90 ? j.body.slice(0, 90) + '…' : j.body) : 'Just a mood today.'), attrs: 'data-open-journal' }));
     }
-    $('#c-alerts').innerHTML = alerts;
+    cards.push(RR.ondeckCard(m));
+    cards.push(RR.dcard({ kicker: 'Quick add', ic: 'plus', title: 'Bonus XP', body: 'Reward extra effort with a reason.', attrs: 'data-bonus' }));
+    const live = todayRequests().length + (journalUnread() ? 1 : 0);
+    $('#c-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>new</small></span></div>
+      <div class="dugout">${cards.join('')}</div>`;
 
-    // Today's lineup at a glance: what's still available, pending first.
+    // Tabbed card: today's lineup (tap to award), scoreboard, highlights.
     const open = m.lineup.filter(b => b.status !== 'done').sort((a, b) => (b.status === 'pending') - (a.status === 'pending'));
-    $('#c-lineup').innerHTML = `<div class="panel">${RR.lineupSummary(m)}</div>` +
-      (open.length ? `<div class="lineup" style="margin-top:12px">${open.slice(0, 4).map(b => RR.lineupRow(b, 'parent', true)).join('')}</div>`
-        : '<p class="muted" style="margin:10px 2px 0">Every daily item is done. Great day.</p>') +
-      (open.length > 4 ? `<button class="btn ghost block sm" data-go="lineup" style="margin-top:10px">Full lineup · ${m.lineup.length}</button>` : '');
-    $('#c-stats').innerHTML = RR.statGrid(m);
-    $('#c-unlock').innerHTML = RR.nextUnlock(m);
-    $('#c-highlights').innerHTML = RR.highlights(m);
+    const lineupPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm dark" data-go="lineup">All ${m.lineup.length}</button></div>` +
+      (open.length ? RR.tiles(open.slice(0, 6), 'parent', true) : '<p class="empty">Every daily item is done. Great day.</p>');
+    $('#c-tabs').innerHTML = RR.tabcard('club', [
+      { key: 'lineup', label: 'Today’s Lineup', html: lineupPane },
+      { key: 'score', label: 'Scoreboard', html: RR.scoreboard(m) + '<div style="margin-top:12px">' + RR.statGrid(m) + '</div>' },
+      { key: 'high', label: 'Highlights', html: RR.highlights(m) }
+    ]);
   }
 
   function renderLineup(m) {
     $('#l-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · Tap to award XP';
-    $('#l-summary').innerHTML = `<span class="label" style="margin-bottom:8px">Completed today</span>` + RR.lineupSummary(m) +
-      `<p class="muted" style="margin:10px 0 0;font-size:13px">+${m.todayXP} XP today · Tapped by mistake? Hit Undo.</p>`;
-    $('#l-groups').innerHTML = RR.lineupGroups(m, 'parent');
+    $('#l-summary').innerHTML = `<div class="pane-head" style="margin:0">${RR.diamond(m)}
+      <div style="text-align:right"><span class="label">Today</span><b class="num" style="font-size:28px;color:var(--gold)">+${fmt(m.todayXP)}</b></div></div>`;
+    const cat = c => m.lineup.filter(b => b.cat === c);
+    $('#l-groups').innerHTML = RR.tabcard('lineup', [
+      { key: 'home', label: `Home & School · ${cat('home').length}`, html: RR.tiles(cat('home'), 'parent') },
+      { key: 'sports', label: `On the Field · ${cat('sports').length}`, html: RR.tiles(cat('sports'), 'parent') }
+    ]);
   }
 
   function renderLocker(m) {
     $('#p-bal').textContent = fmt(m.balance);
+    $('#p-ondeck').innerHTML = RR.ondeck(m);
     $('#prize-list').innerHTML = m.rewards.length ? m.rewards.map(r => RR.lockerItem(r, m.balance, 'parent')).join('')
       : '<div class="panel empty" style="grid-column:1/-1">The locker is empty. Add a prize.</div>';
     $('#redeemed').innerHTML = state.redeemed.length ? state.redeemed.map(r => `<li><span class="mark redeem">${icon('gift', 'sm')}</span>
@@ -277,10 +283,10 @@
   const who = r => r.created_by ? ' · ' + esc(r.created_by.split('@')[0]) : '';
 
   function renderStats(m) {
-    $('#s-box').innerHTML = RR.boxScore(m);
+    $('#s-box').innerHTML = RR.scoreboard(m);
     $('#s-stats').innerHTML = RR.statGrid(m, true);
     $('#s-trophies').innerHTML = RR.trophyCase(m);
-    $('#s-ladder').innerHTML = RR.ladder(m);
+    $('#s-ladder').innerHTML = RR.basepath(m);
     renderJournal();
     renderHistory();
   }
@@ -491,7 +497,7 @@
     const c = e.target.closest('[data-f]');
     if (!c) return;
     state.filter = c.dataset.f;
-    state.logLimit = 30;
+    state.logLimit = 15;
     $$('#filters .chip').forEach(x => x.classList.toggle('on', x === c));
     renderHistory();
   });
@@ -530,7 +536,7 @@
   const markJournalSeen = () => { if (state.journal.length) store.set('journalSeen', newestJournal()); };
 
   function renderJournal() {
-    if (state.tab === 'stats') markJournalSeen();
+    if (state.tab === 'stats' && RR.ui.tabs.log === 'postgame') markJournalSeen();
     $('#stats-dot').hidden = !journalUnread();
     if (state.journalMissing) {
       $('#s-moods').innerHTML = '<p class="muted" style="margin:0">Run <code>supabase/add-journal.sql</code> in Supabase to turn on postgame interviews.</p>';
@@ -738,14 +744,17 @@
     $$('.nav [data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === name));
     $$('[data-tab]').forEach(sec => { sec.hidden = sec.dataset.tab !== name; });
     window.scrollTo({ top: 0 });
-    if (name === 'stats') { renderJournal(); renderClubhouse(model()); }
+    if (name === 'stats') renderJournal();
   }
 
   $('#btn-manage').addEventListener('click', () => goTab('manage'));
+  RR.wireUI($('#screen-app'));
+  // Opening the Postgame pane counts as reading his latest interview.
+  $('#postgame').addEventListener('click', e => { if (e.target.closest('[data-pane=postgame]')) { markJournalSeen(); render(); } });
 
   // One listener for every tappable thing inside the app.
   $('#screen-app').addEventListener('click', e => {
-    const t = e.target.closest('[data-go],[data-manage],[data-award],[data-approve],[data-decline],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-edit-b],[data-move]');
+    const t = e.target.closest('[data-go],[data-manage],[data-award],[data-approve],[data-decline],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-bonus],[data-edit-b],[data-move]');
     if (!t) return;
     const d = t.dataset;
     if (t.id === 'manage-back') { goTab(state.prevTab); return; }
@@ -758,7 +767,8 @@
     else if (d.editPrize) prizeSheet(state.rewards.find(r => r.id === d.editPrize));
     else if (d.delRow) removeRow(d.delRow);
     else if (d.reply) replySheet(d.reply);
-    else if ('openJournal' in d) { goTab('stats'); $('#postgame').scrollIntoView(); }
+    else if ('openJournal' in d) { goTab('stats'); $('#postgame [data-pane=postgame]').click(); $('#postgame').scrollIntoView(); }
+    else if ('bonus' in d) $('#btn-bonus').click();
     else if (d.editB) behaviorSheet(state.behaviors.find(b => b.id === d.editB));
     else if (d.move) moveUp(d.move);
   });

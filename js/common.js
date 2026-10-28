@@ -334,32 +334,97 @@ const RR = (() => {
   }
 
   // ================================================================ components
+  // UI state that survives re-renders (data refreshes every few seconds).
+  const ui = { flipped: false, tabs: {} };
   const initials = name => esc((name || '?').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase());
 
-  function playerCard(m) {
+  // His personalized baseball card. Front: photo, number, name, position.
+  // Back (tap to flip): a classic cardboard stat sheet.
+  function baseballCard(m) {
     const lv = m.level;
-    const kicker = [m.jersey ? '#' + m.jersey : '', m.position].filter(Boolean).join(' · ') || 'The Clubhouse';
-    return `<section class="pcard" aria-label="Player card">
-      ${seams}
-      ${m.jersey ? `<div class="pcard-jersey" aria-hidden="true">${esc(m.jersey)}</div>` : ''}
-      <div class="pcard-top">
-        <div class="pcard-photo">${m.avatar ? `<img src="${esc(m.avatar)}" alt="">` : initials(m.name)}</div>
-        <div class="pcard-id">
-          <div class="pcard-kicker">${esc(kicker)}</div>
-          <h1 class="pcard-name">${esc(m.name)}</h1>
-          <div class="lvl-badge">${icon('shield')}${esc(lv.name)}</div>
+    const earned = m.badges.filter(b => b.earned).length;
+    const bio = [m.position, lv.name, 'Lvl ' + lv.num].filter(Boolean).map(esc).join(' · ');
+    return `<div class="bcard${ui.flipped ? ' flipped' : ''}" data-flip role="button" tabindex="0" aria-label="${esc(m.name)}’s baseball card. Tap to flip.">
+      <div class="bcard-inner">
+        <div class="bcard-face bcard-front">
+          <div class="bcard-frame">
+            <div class="bcard-photo">${m.avatar ? `<img src="${esc(m.avatar)}" alt="">` : `<span class="ini">${initials(m.name)}</span>`}</div>
+            <span class="bcard-team">The Clubhouse</span>
+            ${m.jersey ? `<span class="bcard-num">${esc(m.jersey)}</span>` : ''}
+            <div class="bcard-plate"><div class="bcard-stitch"></div>
+              <div class="bcard-name">${esc(m.name)}</div>
+              <div class="bcard-meta">${m.position ? `<span class="bcard-pos">${esc(m.position)}</span>` : ''}<span class="bcard-lvl">${esc(lv.name)}</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="bcard-face bcard-back">
+          <div class="bb-head"><b>${esc(m.name)}</b><span>${m.jersey ? '#' + esc(m.jersey) : ''}</span></div>
+          <div class="bb-bio">${bio}</div>
+          <table class="bb-table"><thead><tr><th></th><th>XP</th><th>TSK</th><th>STK</th><th>PRZ</th></tr></thead>
+            <tbody><tr><td>Week</td><td>${fmt(m.weekXP)}</td><td>${m.weekTasks}</td><td>${m.streak}</td><td>–</td></tr>
+            <tr><td>Career</td><td>${fmt(m.lifetime)}</td><td>${fmt(m.tasksCompleted)}</td><td>${m.bestStreak}</td><td>${m.redeemedCount}</td></tr></tbody></table>
+          <div class="bb-note"><b>Scouting report:</b> ${lv.next ? `${fmt(lv.toNext)} XP from ${esc(lv.next.name)}.` : 'Hall of Famer.'} ${earned}/${m.badges.length} trophies.</div>
         </div>
       </div>
-      <div class="pcard-xp">
-        <div><span class="label">XP Balance</span><b><span class="js-bal" data-v="${m.balance}">${fmt(m.balance)}</span><small>XP</small></b></div>
-        <div class="life"><span class="label">Lifetime XP</span><b>${fmt(m.lifetime)}</b></div>
-      </div>
-      <div class="lvl-progress">
-        <div class="lvl-row"><span>Level ${lv.num} · <b>${esc(lv.name)}</b></span>
-          <span>${lv.next ? `${fmt(lv.toNext)} XP to ${esc(lv.next.name)}` : 'Max level'}</span></div>
-        <div class="meter"><i style="width:${lv.pct}%"></i></div>
-      </div>
-    </section>`;
+    </div><span class="bcard-hint">Tap card to flip</span>`;
+  }
+
+  const kv = (ic, k, v) => `<div class="kv"><span class="ic">${icon(ic)}</span><div style="min-width:0"><small>${k}</small><b>${v}</b></div></div>`;
+
+  // The big XP number with level, streak and today beside the card.
+  function xpHero(m) {
+    return `<div class="xphero">
+      <div><span class="label">XP Balance</span>
+        <div class="xp-big"><b class="js-bal" data-v="${m.balance}">${fmt(m.balance)}</b><span>XP</span></div></div>
+      <div class="kvs">
+        ${kv('shield', 'Level ' + m.level.num, esc(m.level.name))}
+        ${kv('flame', 'Streak', `${m.streak} day${m.streak === 1 ? '' : 's'}`)}
+        ${kv('bolt', 'Today', `+${fmt(m.todayXP)} XP`)}
+      </div></div>`;
+  }
+
+  // Lifetime XP split into spent / balance, then what's left to the next level.
+  function xpBar(m) {
+    const lv = m.level;
+    const spent = Math.max(0, m.lifetime - m.balance);
+    const seg = (cls, lab, val, text, ic = '') =>
+      `<div class="seg ${cls}" style="flex:${Math.max(val, 1)} 1 0"><span class="lab">${lab}</span><span class="pill">${ic ? icon(ic) : ''}${text}</span></div>`;
+    return `<div class="lvl-row" style="margin-bottom:8px"><span>Lifetime <b>${fmt(m.lifetime)} XP</b></span>
+        <span>${lv.next ? `Next: <b>${esc(lv.next.name)}</b> at ${fmt(lv.next.min)}` : 'Max level'}</span></div>
+      <div class="segbar">
+        ${spent ? seg('spent', 'Spent', spent, fmt(spent), 'check') : ''}
+        ${seg('bal', 'Balance', m.balance, fmt(m.balance), 'bolt')}
+        ${lv.next ? seg('next', 'To ' + esc(lv.next.name), lv.toNext, fmt(lv.toNext), 'clock') : ''}
+      </div>`;
+  }
+
+  // A tabbed card. tabs: [{ key, label, html }]. Remembers the open tab.
+  function tabcard(id, tabs, cls = '') {
+    const on = ui.tabs[id] && tabs.some(t => t.key === ui.tabs[id]) ? ui.tabs[id] : tabs[0].key;
+    return `<div class="tabcard ${cls}" data-tabcard="${id}">
+      <div class="tabbar" role="tablist">${tabs.map(t => `<button type="button" role="tab" class="${t.key === on ? 'on' : ''}" data-pane="${t.key}" aria-selected="${t.key === on}">${t.label}</button>`).join('')}</div>
+      ${tabs.map(t => `<div data-pane-body="${t.key}" ${t.key === on ? '' : 'hidden'}>${t.html}</div>`).join('')}
+    </div>`;
+  }
+
+  // Card flips and tab switches, for any page. They update the DOM in place
+  // (so the flip animates) and remember the choice for the next re-render.
+  function wireUI(root) {
+    const flip = el => { ui.flipped = !ui.flipped; el.classList.toggle('flipped', ui.flipped); };
+    root.addEventListener('click', e => {
+      const f = e.target.closest('[data-flip]');
+      if (f) { flip(f); return; }
+      const p = e.target.closest('[data-pane]');
+      if (!p) return;
+      const card = p.closest('[data-tabcard]');
+      ui.tabs[card.dataset.tabcard] = p.dataset.pane;
+      card.querySelectorAll('[data-pane]').forEach(b => { b.classList.toggle('on', b === p); b.setAttribute('aria-selected', b === p); });
+      card.querySelectorAll('[data-pane-body]').forEach(x => { x.hidden = x.dataset.paneBody !== p.dataset.pane; });
+    });
+    root.addEventListener('keydown', e => {
+      const f = e.target.closest && e.target.closest('[data-flip]');
+      if (f && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); flip(f); }
+    });
   }
 
   const statTile = (label, value, unit = '', ic = '', hot = false) =>
@@ -373,57 +438,113 @@ const RR = (() => {
       statTile('Prizes redeemed', fmt(m.redeemedCount), '', 'gift')
     ];
     if (full) tiles.push(statTile('Lifetime XP', fmt(m.lifetime), 'XP', 'star'), statTile('Best streak', m.bestStreak, m.bestStreak === 1 ? 'day' : 'days', 'trophy'));
-    return `<div class="stats">${tiles.join('')}</div>`;
+    return `<div class="stats${full ? ' three' : ''}">${tiles.join('')}</div>`;
   }
 
-  const STATUS = {
-    done: `<span class="status done">${icon('check')}Completed</span>`,
-    pending: `<span class="status pending">${icon('clock')}Pending Approval</span>`,
-    open: '<span class="status open">Available</span>'
-  };
-
-  // mode 'parent': the whole row is a button that awards XP.
-  // mode 'kid':    an "I did it" button sends it for approval.
-  // showCat: print the category (left off inside a section that already names it).
-  function lineupRow(b, mode, showCat = false) {
+  // One lineup item as a tile.
+  //   mode 'parent':          the tile is a button that awards XP
+  //   mode 'kid-can-request': an "I did it" button sends it for approval
+  //   mode 'kid':             view only
+  function lineupTile(b, mode, showCat = false) {
     const canAct = b.status === 'open' && mode === 'kid-can-request';
-    const sub = [showCat ? `<span class="${b.cat === 'sports' ? 'field' : ''}">${CATEGORIES[b.cat]}</span>` : '',
-      b.once_daily ? 'Once a day' : b.n ? `Earned ×${b.n} today` : 'Any time'].filter(Boolean).join(' · ');
-    const no = b.status === 'done' ? icon('check', 'sm') : b.order;
-    const inner = `<span class="lu-no">${no}</span>
-      <span class="lu-main"><span class="lu-name">${esc(b.name)}</span>
-        <span class="lu-meta">${canAct ? '' : STATUS[b.status]}<span class="lu-sub">${sub}</span></span></span>`;
-    if (mode === 'parent') {
-      return `<button class="lu ${b.status}" data-award="${b.id}" aria-label="Award ${b.points} XP for ${esc(b.name)}">${inner}
-        <span class="lu-side"><span class="xp">+${b.points}<small>XP</small></span></span></button>`;
-    }
-    const act = canAct ? `<button class="lu-act" data-request="${b.id}">I did it</button>` : '';
-    return `<div class="lu ${b.status}">${inner}<span class="lu-side"><span class="xp">+${b.points}<small>XP</small></span>${act}</span></div>`;
+    const st = b.status === 'done' ? '<span class="st done">Completed</span>'
+      : b.status === 'pending' ? '<span class="st pending">Pending Approval</span>' : '<span class="st">Available</span>';
+    const freq = b.once_daily ? 'Once a day' : b.n ? `×${b.n} today` : 'Any time';
+    const sub = showCat ? `<span class="${b.cat === 'sports' ? 'field' : ''}">${CATEGORIES[b.cat]}</span><br>${freq}` : freq;
+    const inner = `<span class="tile-top"><span class="lu-no">${b.status === 'done' ? icon('check') : b.order}</span>${st}</span>
+      <span class="tile-name">${esc(b.name)}</span>
+      <span class="tile-bot"><span class="tile-xp">+${b.points}<small>XP</small></span>
+        ${canAct ? `<button class="lu-act" data-request="${b.id}">I did it</button>` : `<span class="tile-sub">${sub}</span>`}</span>`;
+    return mode === 'parent'
+      ? `<button class="tile ${b.status}" data-award="${b.id}" aria-label="Award ${b.points} XP for ${esc(b.name)}">${inner}</button>`
+      : `<div class="tile ${b.status}">${inner}</div>`;
   }
 
-  function lineupSummary(m) {
-    const total = m.lineup.length;
-    return `<div class="summary-bar"><div class="meter${total && m.doneCount >= total ? ' full' : ''}"><i style="width:${pct(m.doneCount, total)}%"></i></div>
-      <b>${m.doneCount}<small> / ${total}</small></b></div>`;
+  const tiles = (items, mode, showCat) => items.length
+    ? `<div class="tiles">${items.map(b => lineupTile(b, mode, showCat)).join('')}</div>`
+    : '<p class="empty">Nothing here.</p>';
+
+  // Lineup progress as an infield: each quarter of the lineup puts a runner on.
+  function diamond(m) {
+    const total = m.lineup.length, done = m.doneCount;
+    const p = total ? done / total : 0;
+    const on = [p >= .25, p >= .5, p >= .75, p >= 1];
+    const base = (x, y, lit) => `<rect x="${x - 6}" y="${y - 6}" width="12" height="12" transform="rotate(45 ${x} ${y})" fill="${lit ? '#f6c90e' : '#262a31'}" stroke="${lit ? '#f6c90e' : '#4a505b'}" stroke-width="1.5"/>`;
+    const call = p >= 1 ? 'Home run' : p >= .75 ? 'Runner on third' : p >= .5 ? 'Runner on second' : p >= .25 ? 'Runner on first' : 'Leading off';
+    return `<div class="diamond">
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M32 56 L56 32 L32 8 L8 32 Z" fill="rgba(43,212,122,.08)" stroke="#3a3f49" stroke-width="1.5"/>
+        <circle cx="32" cy="32" r="4" fill="#3a3f49"/>
+        ${base(56, 32, on[0])}${base(32, 8, on[1])}${base(8, 32, on[2])}
+        <path d="M26 52 h12 v4 l-6 5 l-6 -5 z" fill="${on[3] ? '#f6c90e' : '#f4f5f7'}"/>
+      </svg>
+      <div><b>${call}</b><small>${done} of ${total} done today</small></div></div>`;
   }
 
-  function lineupGroups(m, mode) {
-    if (!m.lineup.length) return '<div class="panel empty">The lineup is empty.</div>';
-    return ['home', 'sports'].map(cat => {
-      const items = m.lineup.filter(b => b.cat === cat);
-      if (!items.length) return '';
-      const done = items.filter(b => b.status === 'done' || (!b.once_daily && b.n > 0)).length;
-      return `<div class="group-head"><span>${CATEGORIES[cat]}</span><span>${done}/${items.length}</span></div>
-        <div class="lineup">${items.map(b => lineupRow(b, mode)).join('')}</div>`;
-    }).join('');
+  // The weekly box score, styled like a ballpark scoreboard.
+  function scoreboard(m) {
+    const today = localDay();
+    const cls = d => d === today ? 'today' : d > today ? 'future' : '';
+    const [Y, M, D] = m.week[0].split('-').map(Number);
+    const wk = new Date(Y, M - 1, D).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const row = (name, f, tot) => `<span class="r">${name}</span>${m.week.map(d => `<span class="c ${cls(d)}">${d > today ? '–' : f(d)}</span>`).join('')}<span class="c tot">${tot}</span>`;
+    return `<div class="scoreboard">
+      <div class="sb-head"><b>Scoreboard</b><span>Week of ${esc(wk)}</span></div>
+      <div class="sb-grid">
+        <span></span>${m.week.map(d => `<span class="h ${cls(d)}">${shortDay(d).slice(0, 2)}</span>`).join('')}<span class="h">Tot</span>
+        ${row('XP', d => m.box[d].xp, fmt(m.weekXP))}
+        ${row('Tasks', d => m.box[d].tasks, m.weekTasks)}
+      </div></div>`;
+  }
+
+  // Road to the Hall: the six levels as bases on a base path.
+  function basepath(m) {
+    const n = LEVELS.length;
+    const fill = (m.level.idx + (m.level.next ? m.level.pct / 100 : 0)) / (n - 1) * 100;
+    return `<div class="panel"><div class="basepath"><div class="track"><i style="width:${Math.min(100, fill)}%"></i></div>
+      ${LEVELS.map((l, i) => `<div class="bp${i <= m.level.idx ? ' reached' : ''}${i === m.level.idx ? ' current' : ''}">
+        <div class="base"></div><b>${esc(l.name)}</b><span>${fmt(l.min)}</span></div>`).join('')}</div>
+      <p class="muted" style="margin:14px 0 0;font-size:13px;text-align:center">${m.level.next
+        ? `<b style="color:var(--text)">${fmt(m.level.toNext)} XP</b> to ${esc(m.level.next.name)}. Levels come from lifetime XP, so spending XP never drops you a level.`
+        : 'Hall of Famer. The top of the game.'}</p></div>`;
+  }
+
+  // A colored activity card for the Dugout feed.
+  function dcard({ color = 'dark', kicker, ic = '', title, body = '', attrs = '', acts = '', thumb = '', meter = null }) {
+    const tag = attrs.includes('data-') && !acts ? 'button' : 'div';
+    return `<${tag} class="dcard ${color}" ${attrs}>
+      <span class="k">${ic ? icon(ic) : ''}${esc(kicker)}</span>
+      <h4>${esc(title)}</h4>${body ? `<p>${body}</p>` : ''}
+      ${tag === 'button' ? `<span class="go">${icon('right', 'sm')}</span>` : ''}
+      ${thumb}${meter !== null ? `<div class="meter thin" style="${thumb ? 'margin-right:72px' : ''}"><i style="width:${meter}%"></i></div>` : ''}
+      ${acts ? `<div class="acts">${acts}</div>` : ''}</${tag}>`;
+  }
+
+  // The next prize he's saving for, as a Dugout card.
+  function ondeckCard(m) {
+    const r = m.nextPrize;
+    if (!r) return m.rewards.length ? dcard({ color: 'mint', kicker: 'Prize Locker', ic: 'unlock', title: 'All unlocked', body: 'Every prize in the locker is unlocked.', attrs: 'data-go="locker"' }) : '';
+    return dcard({ color: 'mint', kicker: 'On deck', ic: 'gift', title: r.name, body: `<b>${fmt(r.cost - m.balance)} XP</b> to go · ${fmt(r.cost)} XP`,
+      attrs: 'data-go="locker"', thumb: `<span class="thumb">${shot(r)}</span>`, meter: pct(m.balance, r.cost) });
   }
 
   const shot = (r, cls = 'shot') => `<div class="${cls}">${r && r.image_url ? `<img src="${esc(r.image_url)}" alt="" loading="lazy">` : icon('gift')}</div>`;
 
+  // Featured prize at the top of the Prize Locker.
+  function ondeck(m) {
+    const r = m.nextPrize;
+    if (!r) return '';
+    return `<div class="ondeck">${shot(r)}
+      <div><span class="label">On deck</span><h3>${esc(r.name)}</h3>
+        <div class="cost">${fmt(r.cost)}<small>XP</small></div>
+        <div class="meter" style="margin-top:8px"><i style="width:${pct(m.balance, r.cost)}%"></i></div>
+        <p><b>${fmt(r.cost - m.balance)} XP</b> to unlock</p></div></div>`;
+  }
+
   // mode 'parent' adds Redeem + edit; 'kid' is view-only.
   function lockerItem(r, balance, mode) {
     const ready = balance >= r.cost;
-    const left = ready ? (mode === 'parent' ? 'Ready to redeem' : 'Unlocked · ask a parent') : `${fmt(r.cost - balance)} XP to go`;
+    const left = ready ? (mode === 'parent' ? 'Ready to redeem' : 'Ask a parent') : `${fmt(r.cost - balance)} to go`;
     return `<article class="item ${ready ? 'unlocked' : 'locked'}">
       ${shot(r)}
       <span class="lockmark">${icon(ready ? 'unlock' : 'lock')}${ready ? 'Unlocked' : 'Locked'}</span>
@@ -437,21 +558,6 @@ const RR = (() => {
       </div></article>`;
   }
 
-  function nextUnlock(m) {
-    const r = m.nextPrize;
-    if (!r) {
-      return `<div class="panel"><span class="label">Next unlock</span><p style="margin:8px 0 0">${m.rewards.length
-        ? 'Every prize in the locker is unlocked. Time to cash in.' : 'No prizes in the locker yet.'}</p></div>`;
-    }
-    return `<div class="panel unlock">
-      ${shot(r)}
-      <div><span class="label">Next unlock</span>
-        <h4>${esc(r.name)}</h4>
-        <div class="cost">${fmt(r.cost)}<small>XP</small></div>
-        <div class="meter"><i style="width:${pct(m.balance, r.cost)}%"></i></div>
-        <p><b>${fmt(r.cost - m.balance)} XP</b> to go</p></div></div>`;
-  }
-
   const rowMark = r => r.kind === 'redeem' ? `<span class="mark redeem">${icon('gift', 'sm')}</span>`
     : r.kind === 'journal' ? `<span class="mark journal">${icon('mic', 'sm')}</span>`
     : r.kind === 'adjust' ? `<span class="mark">${icon('star', 'sm')}</span>`
@@ -460,32 +566,15 @@ const RR = (() => {
   const rowLabel = r => r.kind === 'redeem' ? 'Redeemed: ' + r.reason : r.kind === 'adjust' && r.points > 0 ? 'Bonus: ' + r.reason : r.reason;
 
   function highlights(m) {
-    if (!m.highlights.length) return '<div class="panel empty">Highlights show up here as XP comes in.</div>';
-    return `<div class="panel"><ul class="list">${m.highlights.map(r => `<li>${rowMark(r)}
-      <span class="grow"><b>${esc(rowLabel(r))}</b><small>${dayLabel(r.day)} · ${timeOf(r.created_at)}</small></span>${rowDelta(r)}</li>`).join('')}</ul></div>`;
-  }
-
-  function boxScore(m) {
-    const today = localDay();
-    const cls = d => d === today ? 'today' : d > today ? 'future' : '';
-    const cell = (d, v) => `<td class="${cls(d)}">${d > today ? '–' : v}</td>`;
-    return `<div class="panel" style="padding:12px 14px"><table class="box">
-      <thead><tr><th></th>${m.week.map(d => `<th class="${cls(d)}">${d === today ? 'Tod' : shortDay(d)}</th>`).join('')}<th class="tot">Tot</th></tr></thead>
-      <tbody>
-        <tr><td>XP</td>${m.week.map(d => cell(d, m.box[d].xp)).join('')}<td class="tot">${fmt(m.weekXP)}</td></tr>
-        <tr><td>Tasks</td>${m.week.map(d => cell(d, m.box[d].tasks)).join('')}<td class="tot">${m.weekTasks}</td></tr>
-      </tbody></table></div>`;
+    if (!m.highlights.length) return '<p class="empty">Highlights show up here as XP comes in.</p>';
+    return `<ul class="list">${m.highlights.map(r => `<li>${rowMark(r)}
+      <span class="grow"><b>${esc(rowLabel(r))}</b><small>${dayLabel(r.day)} · ${timeOf(r.created_at)}</small></span>${rowDelta(r)}</li>`).join('')}</ul>`;
   }
 
   function trophyCase(m) {
     return `<div class="panel"><div class="trophies">${m.badges.map(b => `<div class="trophy ${b.earned ? 'earned' : 'locked'}">
       <div class="medal">${icon(b.earned ? b.icon : 'lock')}</div><b>${esc(b.name)}</b>
       <small>${b.earned ? esc(b.desc) : `${b.have}/${b.need} · ${esc(b.desc)}`}</small></div>`).join('')}</div></div>`;
-  }
-
-  function ladder(m) {
-    return `<div class="panel ladder">${LEVELS.map((l, i) => `<div class="rung${i <= m.level.idx ? ' reached' : ''}${i === m.level.idx ? ' current' : ''}">
-      <span class="dot"></span><b>${esc(l.name)}</b><span>${fmt(l.min)} XP</span></div>`).join('')}</div>`;
   }
 
   function gameLogRows(rows, opts = {}) {
@@ -536,7 +625,7 @@ const RR = (() => {
     client, configured, esc, $, $$, localDay, addDays, weekStart, weekDays, last7, dayLabel, shortDay, timeOf, signed, fmt, pct,
     store, toast, countTo, burst, icon, brandMark,
     MOODS, mood, promptFor, LEVELS, levelFor, CATEGORIES, catOf, model,
-    playerCard, statGrid, lineupRow, lineupSummary, lineupGroups, lockerItem, nextUnlock, highlights, boxScore, trophyCase, ladder,
-    gameLogRows, moodWeek, shot, celebrate
+    ui, wireUI, baseballCard, xpHero, xpBar, tabcard, statGrid, lineupTile, tiles, diamond, scoreboard, basepath,
+    dcard, ondeckCard, ondeck, lockerItem, highlights, trophyCase, gameLogRows, moodWeek, shot, celebrate
   };
 })();

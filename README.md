@@ -5,7 +5,11 @@
 A player-development app for Jaylen. Mom and Dad each sign in on their own phones and share one account. Jaylen gets his own player dashboard. It's built to feel like a baseball video game: he earns XP, levels up and unlocks prizes.
 
 **Parent app** (`index.html`)
-- **Clubhouse:** his player card, check-ins waiting for approval, today's lineup, his stats, the next unlock and recent highlights.
+- **Clubhouse:** a dashboard.
+  - **Baseball card:** his personalized card. Tap it to flip to the stat sheet on the back.
+  - **XP and levels:** his XP balance and level, plus a bar showing XP spent, his balance and how far he is from the next level.
+  - **Dugout:** check-ins to approve, new postgame interviews, the next prize and quick Bonus XP.
+  - **Tabbed card:** Today's Lineup (with an infield diamond that fills its bases as he completes things), Scoreboard and Highlights.
 - **Lineup:** tap any item to award XP (two taps from opening the app). Bonus XP lives here too.
 - **Prize Locker:** add prizes with product photos, set XP costs and redeem.
 - **Stats:** weekly box score, season stats, the Trophy Case, Road to the Hall, his Postgame Interviews (read and reply) and the full game log.

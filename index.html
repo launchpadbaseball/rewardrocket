@@ -84,26 +84,22 @@
 
       <!-- CLUBHOUSE -->
       <section data-tab="clubhouse">
-        <div id="c-card"></div>
-        <div id="c-alerts"></div>
-        <div class="sec"><h2>Today’s Lineup</h2><button class="link" data-go="lineup">Award XP</button></div>
-        <div id="c-lineup"></div>
-        <div class="sec"><h2>My Stats</h2><span class="sub">This week</span></div>
-        <div id="c-stats"></div>
-        <div class="sec"><h2>Next Unlock</h2><button class="link" data-go="locker">Prize Locker</button></div>
-        <div id="c-unlock"></div>
-        <div class="sec"><h2>Recent Highlights</h2></div>
-        <div id="c-highlights"></div>
+        <div class="club">
+          <div class="a-card" id="c-card"></div>
+          <div class="a-xp" id="c-xp"></div>
+          <div class="a-bar panel" id="c-bar"></div>
+          <div class="a-dugout" id="c-dugout"></div>
+          <div class="a-tabs" id="c-tabs"></div>
+        </div>
       </section>
 
       <!-- LINEUP -->
       <section data-tab="lineup" hidden>
         <h1 class="page-title">Daily Lineup</h1>
         <div class="page-sub" id="l-date"></div>
-        <div class="panel" id="l-summary" style="margin-bottom:12px"></div>
-        <div id="l-pending"></div>
+        <div class="panel" id="l-summary" style="margin-bottom:14px"></div>
         <div id="l-groups"></div>
-        <div class="btn-row" style="margin-top:16px">
+        <div class="btn-row" style="margin-top:14px">
           <button class="btn" id="btn-bonus"></button>
           <button class="btn dark" data-manage="lineup"></button>
         </div>
@@ -117,6 +113,7 @@
           <span class="bal-chip">Balance <b id="p-bal">0</b> XP</span>
           <button class="btn sm" id="btn-add-prize"></button>
         </div>
+        <div id="p-ondeck" style="margin-bottom:14px"></div>
         <div class="locker" id="prize-list"></div>
         <div class="sec"><h2>Redeemed</h2></div>
         <div class="panel"><ul class="list" id="redeemed"></ul></div>
@@ -126,27 +123,37 @@
       <section data-tab="stats" hidden>
         <h1 class="page-title">Stats</h1>
         <div class="page-sub">Season to date</div>
-        <div class="sec" style="margin-top:6px"><h2>Weekly Box Score</h2></div>
-        <div id="s-box"></div>
-        <div class="sec"><h2>Season Stats</h2></div>
-        <div id="s-stats"></div>
-        <div class="sec"><h2>Trophy Case</h2></div>
-        <div id="s-trophies"></div>
-        <div class="sec"><h2>Road to the Hall</h2></div>
-        <div id="s-ladder"></div>
-        <div class="sec" id="postgame"><h2>Postgame Interviews</h2><span class="sub">How he’s feeling</span></div>
-        <div class="panel" id="s-moods" style="margin-bottom:12px"></div>
-        <div id="journal-list"></div>
-        <div class="sec"><h2>Game Log</h2></div>
-        <div class="panel">
-          <div class="chips" id="filters">
-            <button class="chip on" data-f="all">All</button>
-            <button class="chip" data-f="earn">Earned</button>
-            <button class="chip" data-f="adjust">Bonus</button>
-            <button class="chip" data-f="redeem">Prizes</button>
+        <div class="bento">
+          <div class="wide" id="s-box"></div>
+          <div id="s-stats"></div>
+          <div>
+            <div class="sec" style="margin-top:0"><h2>Road to the Hall</h2></div>
+            <div id="s-ladder"></div>
           </div>
-          <div id="history"></div>
-          <button class="btn ghost block" id="load-older" style="margin-top:10px" hidden>Load older</button>
+          <div class="wide">
+            <div class="sec" style="margin-top:4px"><h2>Trophy Case</h2></div>
+            <div id="s-trophies"></div>
+          </div>
+          <div class="wide tabcard" data-tabcard="log" id="postgame">
+            <div class="tabbar" role="tablist">
+              <button type="button" role="tab" class="on" data-pane="games" aria-selected="true">Game Log</button>
+              <button type="button" role="tab" data-pane="postgame" aria-selected="false">Postgame</button>
+            </div>
+            <div data-pane-body="games">
+              <div class="chips" id="filters">
+                <button class="chip on" data-f="all">All</button>
+                <button class="chip" data-f="earn">Earned</button>
+                <button class="chip" data-f="adjust">Bonus</button>
+                <button class="chip" data-f="redeem">Prizes</button>
+              </div>
+              <div id="history"></div>
+              <button class="btn ghost block" id="load-older" style="margin-top:10px" hidden>Load older</button>
+            </div>
+            <div data-pane-body="postgame" hidden>
+              <div class="panel" id="s-moods" style="margin-bottom:12px"></div>
+              <div id="journal-list"></div>
+            </div>
+          </div>
         </div>
       </section>
 
