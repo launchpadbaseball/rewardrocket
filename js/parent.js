@@ -22,6 +22,9 @@
     journal: [],         // newest day first
     requests: [],        // "I did it" check-ins from his dashboard
     stats: null,         // career stats (lifetime XP etc.)
+    activity: [],        // what Jaylen did (check-ins, interviews), newest first
+    activityMissing: false,
+    notif: null,         // my email setting + email status
     journalMissing: false,
     clubMissing: false,  // true until supabase/add-clubhouse.sql has been run
     balance: 0,
@@ -142,7 +145,7 @@
 
   async function loadAll() {
     const since = new Date(); since.setDate(since.getDate() - HISTORY_DAYS);
-    const [s, b, r, l, bal, red, jr, ps, rq] = await Promise.all([
+    const [s, b, r, l, bal, red, jr, ps, rq, ac, nt] = await Promise.all([
       db.from('settings').select('*').eq('id', 1).maybeSingle(),
       db.from('behaviors').select('*').order('sort').order('created_at'),
       db.from('rewards').select('*').order('cost').order('sort'),
@@ -151,7 +154,9 @@
       db.from('ledger').select('*').eq('kind', 'redeem').order('created_at', { ascending: false }).limit(50),
       db.from('journal').select('*').order('day', { ascending: false }).limit(60),
       db.rpc('player_stats'),
-      db.from('lineup_requests').select('*').order('created_at')
+      db.from('lineup_requests').select('*').order('created_at'),
+      db.from('activity').select('*').order('created_at', { ascending: false }).limit(40),
+      db.rpc('my_notifications')
     ]);
     const err = [s, b, r, l, bal, red].find(x => x.error);
     if (err) { toast(friendly(err.error), { warn: true }); return; }
@@ -171,6 +176,9 @@
     state.clubMissing = !!(ps.error || rq.error);
     state.stats = ps.error ? null : ps.data;
     state.requests = rq.error ? [] : rq.data;
+    state.activityMissing = !!ac.error;
+    state.activity = ac.error ? [] : ac.data;
+    state.notif = nt.error ? null : nt.data;
     render();
   }
 
@@ -181,8 +189,10 @@
   function subscribe() {
     if (channel) return;
     channel = db.channel('family');
-    ['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'lineup_requests'].forEach(table =>
+    ['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'lineup_requests', 'activity'].forEach(table =>
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, reloadSoon));
+    // Something Jaylen just did: pop it up right away.
+    channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, ({ new: a }) => alertActivity(a));
     channel.subscribe(status => {
       const live = status === 'SUBSCRIBED';
       $('#sync').classList.toggle('off', !live);
@@ -215,6 +225,7 @@
   // ---------------------------------------------------------------- render
   let shownBalance = null;
   function render() {
+    renderBell();
     const m = model();
     renderClubhouse(m); renderLineup(m); renderLocker(m); renderStats(m); renderManage();
     shownBalance = m.balance;
@@ -608,6 +619,88 @@
     return new URL('kid.html#' + state.settings.kid_token, location.href).href;
   }
 
+  // ---------------------------------------------------------------- notifications
+  const seenAt = () => store.get('notifSeen') || '';
+  const unread = () => state.activity.filter(a => a.created_at > seenAt());
+
+  function renderBell() {
+    const btn = $('#btn-bell');
+    btn.hidden = state.activityMissing;
+    const n = unread().length;
+    btn.innerHTML = icon('bell') + (n ? `<i class="badge">${n > 9 ? '9+' : n}</i>` : '');
+    btn.setAttribute('aria-label', n ? `Notifications: ${n} new` : 'Notifications');
+  }
+
+  function openNotifications() {
+    const fresh = new Set(unread().map(a => a.id));
+    if (state.activity.length) store.set('notifSeen', state.activity[0].created_at);
+    renderBell();
+    sheet(`<h3>Notifications</h3>
+      ${state.activity.length ? `<ul class="list notif-list">${state.activity.map(a => `<li class="${fresh.has(a.id) ? 'new' : ''}">
+          <span class="mark ${a.kind === 'journal' ? 'journal' : ''}">${icon(a.kind === 'journal' ? 'mic' : 'clock', 'sm')}</span>
+          <span class="grow"><b>${esc(a.title)}</b><small>${esc(a.body)}</small><small class="when">${RR.dayLabel(RR.localDay(new Date(a.created_at)))} · ${RR.timeOf(a.created_at)}</small></span></li>`).join('')}</ul>`
+        : `<p class="empty">Nothing yet. When ${esc(kidName())} checks in a lineup item or answers his postgame interview, it shows up here.</p>`}
+      <div class="btns"><button class="btn ghost" data-close>Close</button>${todayRequests().length ? `<button class="btn" data-close data-go-approve>Review check-ins</button>` : ''}</div>`)
+      .on('[data-go-approve]', () => goTab('clubhouse'));
+  }
+
+  // A new activity row arrived live from the database.
+  function alertActivity(a) {
+    toast(a.title, { action: { label: a.kind === 'journal' ? 'Read' : 'Review', run: () => {
+      if (a.kind === 'journal') { goTab('stats'); $('#postgame [data-pane=postgame]').click(); $('#postgame').scrollIntoView(); }
+      else goTab('clubhouse');
+    } } });
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try { new Notification(a.title, { body: a.body, icon: 'icons/icon-192.png', tag: a.id }); } catch { /* not supported here */ }
+    }
+  }
+
+  function renderNotifyPanel() {
+    const box = $('#notify-panel');
+    if (state.activityMissing || !state.notif) {
+      box.innerHTML = '<p class="muted" style="margin:0;font-size:13.5px">Run <code>supabase/add-notifications.sql</code> in Supabase to turn on notifications (see the README).</p>';
+      return;
+    }
+    const n = state.notif, last = n.last;
+    let status;
+    if (!n.configured) status = `${icon('mail', 'sm')}<span>Email isn’t set up yet. It needs a free Resend key added in Supabase (README → <b>Email notifications</b>).</span>`;
+    else if (last && last.status >= 200 && last.status < 300) status = `${icon('check', 'sm')}<span>Email is on. Last ${last.kind === 'test' ? 'test ' : ''}email sent ${RR.dayLabel(RR.localDay(new Date(last.at))).toLowerCase()} at ${RR.timeOf(last.at)}.</span>`;
+    else if (last && (last.error || last.status)) status = `${icon('x', 'sm')}<span class="bad">Last email failed: ${esc(last.error || 'status ' + last.status)}</span>`;
+    else status = `${icon('check', 'sm')}<span>Email is set up.</span>`;
+    const deviceBtn = 'Notification' in window && Notification.permission !== 'granted'
+      ? `<button class="btn sm ghost" data-device-alerts>${icon('bell')}Pop-ups on this device</button>` : '';
+    box.innerHTML = `<p class="muted" style="margin:0 0 12px;font-size:13.5px">You’ll hear about it when ${esc(kidName())} checks in a lineup item or answers his postgame interview: the bell up top, a pop-up while the app is open, and email.</p>
+      <label class="toggle"><span><b>Email me</b><small>${esc(state.user.email)} · several taps in a row arrive as one email</small></span>
+        <span class="switch"><input type="checkbox" id="notify-email" ${n.notify_email ? 'checked' : ''}><i></i></span></label>
+      <div class="notify-status">${status}</div>
+      <div class="btn-row" style="margin-top:12px"><button class="btn sm dark" data-test-email ${n.configured ? '' : 'disabled'}>${icon('mail')}Send me a test email</button>${deviceBtn}</div>`;
+  }
+
+  $('#notify-panel').addEventListener('change', async e => {
+    if (e.target.id !== 'notify-email') return;
+    const on = e.target.checked;
+    const { error } = await db.rpc('set_notify_email', { p_on: on });
+    if (error) { toast(friendly(error), { warn: true }); e.target.checked = !on; return; }
+    toast(on ? 'Emails on for you' : 'Emails off for you');
+    loadAll();
+  });
+
+  $('#notify-panel').addEventListener('click', async e => {
+    const t = e.target.closest('[data-test-email],[data-device-alerts]');
+    if (!t) return;
+    if ('deviceAlerts' in t.dataset) {
+      const p = await Notification.requestPermission();
+      toast(p === 'granted' ? 'Pop-ups on for this device while the app is open' : 'Pop-ups weren’t allowed on this device');
+      renderNotifyPanel();
+      return;
+    }
+    t.disabled = true;
+    const { error } = await db.rpc('send_test_email');
+    if (error) { toast(friendly(error), { warn: true }); t.disabled = false; return; }
+    toast(`Test email sent to ${state.user.email}. Check your inbox (and spam).`, { ms: 5000 });
+    setTimeout(loadAll, 5000);   // then show whether it went through
+  });
+
   function renderManage() {
     const m = model();
     $('#behavior-admin').innerHTML = m.lineup.map((b, i) => {
@@ -631,6 +724,7 @@
     keep('#journal-points', st.journal_points);
     $('#kid-link').textContent = kidLink();
     $('#open-kid-link').href = kidLink();
+    renderNotifyPanel();
     $('#upgrade-note').innerHTML = state.clubMissing
       ? `<div class="alert amber" style="margin-top:0">${icon('bolt')}<span class="grow"><b>One-time database upgrade</b>
           <small>Run <code>supabase/add-clubhouse.sql</code> in Supabase’s SQL Editor to turn on jersey numbers, lifetime XP levels and check-in approvals.</small></span></div>` : '';
@@ -773,6 +867,7 @@
   }
 
   $('#btn-manage').addEventListener('click', () => goTab('manage'));
+  $('#btn-bell').addEventListener('click', openNotifications);
   RR.wireUI($('#screen-app'));
   // Opening the Postgame pane counts as reading his latest interview.
   $('#postgame').addEventListener('click', e => { if (e.target.closest('[data-pane=postgame]')) { markJournalSeen(); render(); } });

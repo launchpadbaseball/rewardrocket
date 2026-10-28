@@ -42,6 +42,7 @@ Already using the app? Run each file below that you haven't run yet in Supabase 
 | `supabase/add-avatar.sql` | the player photo |
 | `supabase/add-journal.sql` | the Postgame Interview |
 | `supabase/add-clubhouse.sql` | **The Clubhouse redesign:** jersey # and position, check-in approvals, and lifetime-XP levels and stats |
+| `supabase/add-notifications.sql` | **Notifications:** the bell, pop-ups, and email when Jaylen does something |
 
 New installs only need `setup.sql`.
 
@@ -106,6 +107,38 @@ In Supabase, go to **Authentication → URL Configuration** and set **Site URL**
    - **Android (Chrome):** tap **⋮** → **Add to Home screen** (or **Install app**).
 3. Send the URL to your wife. She signs in with her own email and password.
 4. **Jaylen's player dashboard:** in the app, tap the gear (**Front Office**) → **Player Dashboard Link**. Tap **Open** on his device, or copy the link and send it there, then add it to his home screen the same way. His device remembers the link after that.
+
+---
+
+## Notifications
+
+When Jaylen **checks in a lineup item** or **answers his Postgame Interview**, you find out three ways:
+
+1. **Bell (top right):** a red badge counts what's new. Tap it for the feed.
+2. **Pop-up:** appears on any parent phone that has the app open.
+3. **Email:** to each parent who has it switched on. Several taps in a row arrive as **one** email, sent about a minute after he stops tapping.
+
+Each parent controls their own email in the app: gear → **Notifications** → **Email me**. There's also a **Send me a test email** button that shows whether it worked.
+
+### Turning on email (one time, about 10 minutes)
+
+Emails are sent by your database through **Resend**, a free email service (3,000 emails a month).
+
+1. Sign up at **https://resend.com**.
+2. **Choose how you'll send:**
+   - **To email both of you (recommended):** in Resend, go to **Domains → Add domain** and add a domain you own (for example `hudlup.co`). Copy the DNS records it shows into your domain provider's DNS settings, then wait for it to show **Verified**.
+   - **Without a domain:** Resend will only deliver to the email address you signed up to Resend with.
+3. In Resend, go to **API Keys → Create API key** (Sending access) and copy it. It starts with `re_`.
+4. In Supabase, open **SQL Editor → New query**, paste this with your key and domain, and click **Run**:
+   ```sql
+   update private.email_settings
+     set api_key = 're_your_key_here',
+         from_address = 'The Clubhouse <clubhouse@yourdomain.com>';
+   ```
+   Skipped the domain? Leave out the `from_address` line.
+5. In the app, go to gear → **Notifications** → **Send me a test email**. A few seconds later it shows whether the email went through (or Resend's error message if not).
+
+The key is stored in a private part of the database that the website can't read.
 
 ---
 

@@ -596,3 +596,14 @@ textarea.input { resize: vertical; min-height: 96px; line-height: 1.45; }
 .rbtn.ok { background: #121212; color: #fff; }
 .rbtn .ico { width: 17px; height: 17px; stroke-width: 2.8; }
 .dcard .btn.block { width: 100%; }
+
+/* ---------- Notifications ---------- */
+.icon-btn.bell { position: relative; }
+.icon-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 99px; background: var(--red); color: #fff; font: 800 11px/19px var(--body); font-style: normal; text-align: center; border: 2px solid var(--bg); }
+.notif-list li { align-items: flex-start; }
+.notif-list li.new .grow b::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-right: 6px; vertical-align: 1px; }
+.notif-list .grow small { display: block; }
+.notif-list .when { margin-top: 3px; font-size: 11.5px; color: #6b717c; }
+.notify-status { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; color: var(--text-2); }
+.notify-status .ico { color: var(--gold); margin-top: 1px; }
+.notify-status .bad { color: var(--red); }
