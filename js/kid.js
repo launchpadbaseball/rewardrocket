@@ -62,13 +62,14 @@
     shownBalance = m.balance;
     $('#k-bar').innerHTML = RR.xpBar(m);
 
-    // Dugout: today's postgame question, check-ins waiting, the latest reply, the next prize.
+    // Header: his XP and streak, always in view.
+    $('#k-top').innerHTML = `<span class="hchip">${icon('bolt')}<b>${fmt(m.balance)}</b>XP</span>` +
+      (m.streak ? `<span class="hchip hot">${icon('flame')}<b>${m.streak}</b></span>` : '');
+
+    // Dugout: check-ins waiting, the latest reply, the next prize.
+    // (Today's question has its own big card above.)
     const cards = [];
     const answered = (data.journal || []).some(j => j.day === localDay());
-    if ('journal' in data && !answered) {
-      cards.push(RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: 'Today’s question',
-        body: esc(RR.promptFor(localDay())) + (data.journal_points > 0 && !journalPaidToday() ? ` <b>+${data.journal_points} XP</b>` : ''), attrs: 'data-postgame' }));
-    }
     const waiting = m.lineup.filter(b => b.status === 'pending');
     if (waiting.length) {
       cards.push(RR.dcard({ color: 'yellow', kicker: 'Pending approval', ic: 'clock', title: `${waiting.length} waiting`,
@@ -78,6 +79,9 @@
     if (reply) cards.push(RR.dcard({ color: 'peach', kicker: 'From Mom & Dad', ic: 'message', title: 'Coach’s note', body: esc(reply.parent_reply) }));
     cards.push(RR.ondeckCard(m));
     const live = (('journal' in data && !answered) ? 1 : 0) + waiting.length;
+    // On the Lineup tab, a pointer back to today's question until it's answered.
+    $('#k-lineup-pg').innerHTML = 'journal' in data && !answered
+      ? RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: 'Today’s question is up', body: esc(RR.promptFor(localDay())), attrs: 'data-postgame' }) : '';
     $('#k-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>to do</small></span></div>
       <div class="dugout">${cards.join('')}</div>`;
 
@@ -142,10 +146,16 @@
   function renderJournal() {
     const box = $('#k-j');
     const on = 'journal' in data;   // database not upgraded yet → hide
-    $('#k-journal').hidden = $('#postgame').hidden = !on;
+    $('#k-q').hidden = !on;
     if (!on) return;
-    $('#k-pg-sub').textContent = data.journal_points > 0 ? `+${data.journal_points} XP · once a day` : '';
     const today = jToday();
+    const earn = data.journal_points > 0 && !journalPaidToday();
+    $('#k-q').classList.toggle('done', !!today && !jEditing);
+    $('#k-q-head').innerHTML = `${icon('mic', 'oa-mic')}
+      <div class="oa-top"><span class="onair"><i></i>${today && !jEditing ? 'Wrapped' : 'On air'}</span>
+        <span class="oa-k">Postgame Interview</span>${earn ? `<span class="oa-xp">+${data.journal_points} XP</span>` : ''}</div>
+      <span class="oa-label">Today’s question</span>
+      <h2 class="oa-q">${esc(RR.promptFor(localDay()))}</h2>`;
     if (jEditing && box.querySelector('form')) return;  // don't disturb him mid-sentence
     if (!today || jEditing) { jEditing = true; box.innerHTML = journalForm(today); wireForm(box); }
     else box.innerHTML = journalDone(today);
@@ -158,15 +168,12 @@
     const moodNow = draft.mood || (today && today.mood) || '';
     const body = draft.body != null ? draft.body : (today ? today.body : '');
     return `<form>
-      <span class="label">Today’s question</span>
-      <p class="pg-q">${esc(RR.promptFor(localDay()))}</p>
-      ${data.journal_points > 0 && !journalPaidToday() ? `<div class="pg-earn">${icon('bolt', 'sm')}+${data.journal_points} XP for your answer</div>` : ''}
       <span class="label">How are you feeling?</span>
       <div class="moods">${RR.MOODS.map(m => `<button type="button" class="mood${m.key === moodNow ? ' on' : ''}" data-mood="${m.key}">
         <span>${m.emoji}</span>${m.label}</button>`).join('')}</div>
-      <textarea class="input" name="body" rows="4" maxlength="1000" placeholder="Your answer">${esc(body)}</textarea>
+      <textarea class="input" name="body" rows="3" maxlength="1000" placeholder="Type your answer…">${esc(body)}</textarea>
       <p class="err"></p>
-      <button class="btn block" type="submit" ${moodNow ? '' : 'disabled'}>Send to Mom &amp; Dad</button>
+      <button class="btn block" type="submit" ${moodNow ? '' : 'disabled'}>${icon('mic')}Send my answer</button>
       ${today ? '<button type="button" class="btn ghost block" data-cancel style="margin-top:8px">Never mind</button>' : ''}
     </form>`;
   }
@@ -194,7 +201,7 @@
       if (error) {
         form.querySelector('.err').textContent = /Failed to fetch|Load failed|NetworkError/i.test(error.message)
           ? 'No internet right now. Try again in a minute. Your answer is saved.' : error.message;
-        btn.disabled = false; btn.textContent = 'Send to Mom & Dad';
+        btn.disabled = false; btn.innerHTML = icon('mic') + 'Send my answer';
         return;
       }
       data.journal = [saved].concat((data.journal || []).filter(j => j.day !== saved.day));
@@ -211,22 +218,22 @@
     const m = RR.mood(j.mood);
     const hard = ['sad', 'frustrated', 'worried'].includes(j.mood);
     return `<div>
-      <span class="label" style="color:var(--green)">Sent to Mom &amp; Dad</span>
-      <div class="pg-head" style="margin-top:10px"><span class="m">${m.emoji}</span><div><b>Feeling ${esc(m.label.toLowerCase())}</b><small>${esc(j.prompt || '')}</small></div></div>
-      ${j.body ? `<div class="pg-text">${esc(j.body)}</div>` : ''}
-      <p class="muted" style="font-size:14px">${hard ? 'Thanks for telling us how you feel. Tough days happen to every player. We’ve got you.' : 'Thanks for sharing your day.'}</p>
+      <div class="pg-head"><span class="m">${m.emoji}</span><div><b>Feeling ${esc(m.label.toLowerCase())}</b><small>${icon('check', 'sm')} Sent to Mom &amp; Dad</small></div></div>
+      ${j.body ? `<div class="pg-text">“${esc(j.body)}”</div>` : ''}
+      <p class="oa-note">${hard ? 'Thanks for telling us how you feel. Tough days happen to every player. We’ve got you.' : 'Thanks for sharing your day.'}</p>
       ${j.parent_reply ? `<div class="pg-reply"><span class="label">Mom &amp; Dad replied</span><p>${esc(j.parent_reply)}</p></div>` : ''}
-      <button class="btn ghost block" data-edit-journal>Change my answer</button>
+      <button class="btn ghost sm" data-edit-journal>${icon('edit')}Change my answer</button>
     </div>`;
   }
 
   function pastEntries() {
     const past = (data.journal || []).filter(j => j.day !== localDay()).slice(0, 5);
     if (!past.length) return '';
-    return `<div class="day-head" style="margin-top:18px"><span>Earlier interviews</span></div><ul class="list">${past.map(j => `<li style="align-items:flex-start">
+    return `<details class="oa-past"><summary>Earlier interviews · ${past.length}</summary><ul class="list">${past.map(j => `<li style="align-items:flex-start">
       <span class="mark" style="font-size:18px">${RR.mood(j.mood).emoji}</span>
-      <span class="grow"><b>${RR.dayLabel(j.day)}</b>${j.body ? `<small style="display:block;white-space:pre-wrap;overflow-wrap:anywhere">${esc(j.body)}</small>` : ''}
-      ${j.parent_reply ? `<small style="display:block;color:var(--gold);margin-top:4px">Reply: ${esc(j.parent_reply)}</small>` : ''}</span></li>`).join('')}</ul>`;
+      <span class="grow"><b>${RR.dayLabel(j.day)}</b>${j.prompt ? `<small style="display:block;font-style:italic">${esc(j.prompt)}</small>` : ''}
+      ${j.body ? `<small style="display:block;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text-2)">${esc(j.body)}</small>` : ''}
+      ${j.parent_reply ? `<small style="display:block;color:var(--gold);margin-top:4px">Reply: ${esc(j.parent_reply)}</small>` : ''}</span></li>`).join('')}</ul></details>`;
   }
 
   // ---------------------------------------------------------------- celebrations
@@ -281,7 +288,7 @@
     if (!t) return;
     if (t.dataset.go) goTab(t.dataset.go);
     else if (t.dataset.request) request(t.dataset.request, t);
-    else if ('postgame' in t.dataset) { goTab('lineup'); $('#postgame').scrollIntoView(); }
+    else if ('postgame' in t.dataset) { goTab('clubhouse'); $('#k-q').scrollIntoView({ block: 'start' }); }
     else if ('editJournal' in t.dataset) { jEditing = true; $('#k-j').innerHTML = ''; renderJournal(); }
   });
 

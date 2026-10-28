@@ -455,9 +455,13 @@ const RR = (() => {
       <span class="tile-name">${esc(b.name)}</span>
       <span class="tile-bot"><span class="tile-xp">+${b.points}<small>XP</small></span>
         ${canAct ? `<button class="lu-act" data-request="${b.id}">I did it</button>` : `<span class="tile-sub">${sub}</span>`}</span>`;
-    return mode === 'parent'
-      ? `<button class="tile ${b.status}" data-award="${b.id}" aria-label="Award ${b.points} XP for ${esc(b.name)}">${inner}</button>`
-      : `<div class="tile ${b.status}">${inner}</div>`;
+    if (mode === 'parent') return `<button class="tile ${b.status}" data-award="${b.id}" aria-label="Award ${b.points} XP for ${esc(b.name)}">${inner}</button>`;
+    // Player view: XP up top, one big button (or the status) along the bottom.
+    return `<div class="tile kid ${b.status}">
+      <span class="tile-top"><span class="lu-no">${b.status === 'done' ? icon('check') : b.order}</span><span class="tile-xp">+${b.points}<small>XP</small></span></span>
+      <span class="tile-name">${esc(b.name)}${showCat ? `<span class="tile-cat ${b.cat === 'sports' ? 'field' : ''}">${CATEGORIES[b.cat]}</span>` : ''}</span>
+      ${canAct ? `<button class="lu-act wide" data-request="${b.id}">${icon('check')}I did it</button>` : `<span class="tile-foot">${st}<span class="tile-sub">${freq}</span></span>`}
+    </div>`;
   }
 
   const tiles = (items, mode, showCat) => items.length

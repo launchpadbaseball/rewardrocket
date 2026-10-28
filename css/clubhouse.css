@@ -121,6 +121,12 @@ a { color: var(--gold); }
 .a-tabs { grid-area: tabs; min-width: 0; }
 .bento { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .bento > .wide { grid-column: 1 / -1; }
+/* Player view adds today's interview right under the card. */
+.club.has-q { grid-template-areas: "card xp" "q q" "bar bar" "dugout dugout" "tabs tabs"; }
+.a-q { grid-area: q; min-width: 0; }
+@media (min-width: 900px) {
+  .club.has-q { grid-template-areas: "card xp dugout" "card q dugout" "card bar dugout" "card tabs dugout"; }
+}
 @media (min-width: 900px) {
   .wrap { max-width: 1180px; padding-left: 28px; padding-right: 28px; }
   .club { grid-template-columns: 280px minmax(0, 1fr) 320px; gap: 22px;
@@ -528,3 +534,46 @@ textarea.input { resize: vertical; min-height: 96px; line-height: 1.45; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Header chips (player view) ---------- */
+.hchip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hchip b { font-family: var(--display); font-size: 18px; color: var(--text); letter-spacing: 0; }
+.hchip .ico { width: 15px; height: 15px; color: var(--gold); }
+.hchip.hot b { color: var(--gold); }
+
+/* ---------- Postgame Interview ("on air") ---------- */
+.onair-card { position: relative; overflow: hidden; border-radius: 22px; padding: 16px 16px 16px 20px;
+  background: radial-gradient(120% 90% at 100% 0%, rgba(205, 184, 245, .26), transparent 55%), linear-gradient(160deg, #241e36, #15171b 72%);
+  border: 1px solid rgba(205, 184, 245, .38); box-shadow: 0 14px 34px rgba(0, 0, 0, .35); }
+.onair-card::before { content: ''; position: absolute; left: 0; top: 18px; bottom: 18px; width: 4px; border-radius: 0 4px 4px 0; background: var(--gold); }
+.oa-mic { position: absolute; right: -14px; top: -10px; width: 120px; height: 120px; color: #cdb8f5; opacity: .1; stroke-width: 1.5; }
+.oa-top { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.onair { display: inline-flex; align-items: center; gap: 6px; background: #e5383b; color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; padding: 4px 8px; border-radius: 6px; }
+.onair i { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: blink 1.4s ease-in-out infinite; }
+.onair-card.done .onair { background: var(--panel-3); color: var(--text-2); }
+.onair-card.done .onair i { background: var(--green); animation: none; }
+@keyframes blink { 50% { opacity: .25; } }
+.oa-k { font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #cdb8f5; }
+.oa-xp { margin-left: auto; background: var(--gold); color: var(--gold-ink); font-family: var(--display); font-weight: 800; font-size: 15px; padding: 3px 10px; border-radius: 8px; }
+.oa-label { position: relative; display: block; font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
+.oa-q { position: relative; margin: 0 0 16px; font-family: var(--display); font-weight: 800; font-size: clamp(28px, 8.4vw, 40px); line-height: 1.02; letter-spacing: .005em; }
+.onair-card.done .oa-q { font-size: clamp(20px, 5.6vw, 26px); color: var(--text-2); margin-bottom: 12px; }
+.onair-card .mood { background: rgba(255, 255, 255, .05); border-color: rgba(255, 255, 255, .1); }
+.onair-card .mood.on { background: rgba(246, 201, 14, .14); border-color: var(--gold); }
+.onair-card .input { background: rgba(0, 0, 0, .3); }
+.onair-card .pg-text { background: rgba(0, 0, 0, .25); font-size: 16px; }
+.onair-card .pg-head small { display: inline-flex; align-items: center; gap: 4px; color: var(--green); font-weight: 700; }
+.oa-note { color: #cdb8f5; font-size: 14px; font-weight: 600; margin: 8px 0 10px; }
+.oa-past { margin-top: 14px; border-top: 1px solid rgba(255, 255, 255, .08); padding-top: 10px; }
+.oa-past summary { cursor: pointer; font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); list-style: none; }
+.oa-past summary::-webkit-details-marker { display: none; }
+.oa-past summary::after { content: ' +'; color: var(--gold); }
+.oa-past[open] summary::after { content: ' –'; }
+
+/* ---------- Player-view lineup tiles ---------- */
+.tile.kid .tile-top .tile-xp { font-size: 24px; }
+.tile-cat { display: block; margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.tile-cat.field { color: #9fd8ff; }
+.tile-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.lu-act.wide { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 11px 8px; font-size: 12.5px; border-radius: 11px; }
+.lu-act.wide .ico { width: 15px; height: 15px; stroke-width: 3; }
