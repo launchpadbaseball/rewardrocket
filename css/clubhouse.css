@@ -83,6 +83,9 @@ a { color: var(--gold); }
 /* ---------- Top bar ---------- */
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0 14px; }
 .brand { display: flex; align-items: center; gap: 10px; }
+button.brand { text-align: left; color: inherit; border-radius: 12px; }
+button.brand:active { opacity: .8; }
+.brand-name, .brand-tag { display: block; }
 .brand-mark { width: 34px; height: 34px; flex: none; }
 .brand-name { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: .06em; text-transform: uppercase; line-height: 1; }
 .brand-tag { font-size: 11px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); margin-top: 3px; }
