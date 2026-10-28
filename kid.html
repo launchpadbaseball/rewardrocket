@@ -3,104 +3,96 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>My Reward Rocket 🚀</title>
-  <meta name="theme-color" content="#1b1464">
+  <title>The Clubhouse</title>
+  <meta name="theme-color" content="#0a0b0d">
   <meta name="robots" content="noindex">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="My Rocket">
+  <meta name="apple-mobile-web-app-title" content="Clubhouse">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css">
-  <link rel="stylesheet" href="css/kid.css">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/clubhouse.css">
 </head>
-<body class="kid-page">
+<body>
 
   <section id="k-msg" class="screen" hidden>
-    <div class="card center">
-      <div class="big-logo">🛸</div>
-      <h1 id="k-msg-title">Houston, we have a problem</h1>
+    <div class="panel center">
+      <span class="js-mark"></span>
+      <h1 id="k-msg-title">The Clubhouse</h1>
+      <p class="tagline">Earn Your Wins</p>
       <p class="sub" id="k-msg-body"></p>
     </div>
   </section>
 
-  <main id="k-app" class="wrap kid-wrap" hidden>
-    <header class="k-head">
-      <div>
-        <div class="k-hi" id="k-hi">Hi!</div>
-        <div class="k-sub">Mission Control</div>
-      </div>
-      <div class="k-avatar" id="k-avatar" aria-hidden="true">🪐</div>
-    </header>
+  <main id="k-app" hidden>
+    <div class="wrap">
+      <header class="topbar">
+        <div class="brand"><span class="js-mark"></span>
+          <div><div class="brand-name">The Clubhouse</div><div class="brand-tag">Earn Your Wins</div></div></div>
+      </header>
 
-    <!-- Points -->
-    <section class="k-points">
-      <div class="k-star"><b id="k-bal">0</b><span>points</span></div>
-      <div class="k-today" id="k-today"></div>
-    </section>
+      <!-- CLUBHOUSE -->
+      <section data-tab="clubhouse">
+        <div id="k-card"></div>
+        <div id="k-alerts"></div>
+        <div class="sec"><h2>Today’s Lineup</h2><button class="link" data-go="lineup">Full lineup</button></div>
+        <div id="k-lineup"></div>
+        <div class="sec"><h2>My Stats</h2><span class="sub">This week</span></div>
+        <div id="k-stats"></div>
+        <div class="sec"><h2>Next Unlock</h2><button class="link" data-go="locker">Prize Locker</button></div>
+        <div id="k-unlock"></div>
+        <div class="sec"><h2>Recent Highlights</h2></div>
+        <div id="k-highlights"></div>
+      </section>
 
-    <!-- Next prize mission -->
-    <section class="card k-mission">
-      <h2 id="k-mission-title">🚀 Next mission</h2>
-      <div class="k-track">
-        <span class="k-earth">🌍</span>
-        <div class="k-path"><i id="k-fill"></i><span class="k-rocket" id="k-rocket">🚀</span></div>
-        <span class="k-goal" id="k-goal">🎁</span>
-      </div>
-      <p class="k-left" id="k-left"></p>
-    </section>
+      <!-- LINEUP -->
+      <section data-tab="lineup" hidden>
+        <h1 class="page-title">Daily Lineup</h1>
+        <div class="page-sub" id="k-date"></div>
+        <div class="panel" id="k-summary" style="margin-bottom:12px"></div>
+        <div id="k-groups"></div>
+        <div class="sec" id="postgame"><h2>Postgame Interview</h2><span class="sub" id="k-pg-sub"></span></div>
+        <div class="panel" id="k-journal"><div id="k-j"></div></div>
+      </section>
 
-    <!-- Journal -->
-    <section class="card k-journal" id="k-journal">
-      <h2>📝 My Day</h2>
-      <div id="k-j"></div>
-    </section>
+      <!-- PRIZE LOCKER -->
+      <section data-tab="locker" hidden>
+        <h1 class="page-title">Prize Locker</h1>
+        <div class="page-sub">Unlock gear and prizes with XP</div>
+        <div style="margin-bottom:14px"><span class="bal-chip">Balance <b id="k-bal">0</b> XP</span></div>
+        <div class="locker" id="k-locker"></div>
+      </section>
 
-    <!-- This week -->
-    <section class="card">
-      <h2>🌟 My week</h2>
-      <div class="week" id="k-week"></div>
-    </section>
-
-    <!-- Prizes -->
-    <div class="section-title">🎁 Prizes I can win</div>
-    <div class="prizes" id="k-prizes"></div>
-
-    <!-- Ways to earn -->
-    <section class="card">
-      <h2>🏠 Home &amp; School points</h2>
-      <ul class="list" id="k-ways"></ul>
-    </section>
-
-    <!-- Sports: effort and attitude -->
-    <section class="card k-sports" id="k-sports-card">
-      <h2>🏅 Sports &amp; Team</h2>
-      <p class="k-team" id="k-team"></p>
-      <ul class="list" id="k-sports"></ul>
-    </section>
-
-    <!-- Recent -->
-    <section class="card">
-      <h2>🏅 My latest wins</h2>
-      <ul class="list" id="k-recent"></ul>
-    </section>
-
-    <p class="center k-foot">Only Mom and Dad can give points. Keep being awesome! ✨</p>
-  </main>
-
-  <!-- Celebration overlay -->
-  <div class="k-party" id="k-party" hidden>
-    <div class="k-party-card">
-      <div class="k-party-emoji" id="k-party-emoji">⭐</div>
-      <div class="k-party-title" id="k-party-title"></div>
-      <div class="k-party-body" id="k-party-body"></div>
-      <button class="btn pink" id="k-party-ok">Awesome! 🚀</button>
+      <!-- STATS -->
+      <section data-tab="stats" hidden>
+        <h1 class="page-title">Stats</h1>
+        <div class="page-sub">Season to date</div>
+        <div class="sec" style="margin-top:6px"><h2>Weekly Box Score</h2></div>
+        <div id="k-box"></div>
+        <div class="sec"><h2>Season Stats</h2></div>
+        <div id="k-season"></div>
+        <div class="sec"><h2>Trophy Case</h2></div>
+        <div id="k-trophies"></div>
+        <div class="sec"><h2>Road to the Hall</h2></div>
+        <div id="k-ladder"></div>
+        <div class="sec"><h2>Game Log</h2><span class="sub">Last 2 weeks</span></div>
+        <div class="panel" id="k-log"></div>
+      </section>
     </div>
-  </div>
+
+    <nav class="nav" aria-label="Main">
+      <div class="in">
+        <button data-go="clubhouse" class="on" id="nav-clubhouse"></button>
+        <button data-go="lineup" id="nav-lineup"></button>
+        <button data-go="locker" id="nav-locker"></button>
+        <button data-go="stats" id="nav-stats"></button>
+      </div>
+    </nav>
+  </main>
 
   <script src="vendor/supabase-2.117.3.js"></script>
   <script src="js/config.js"></script>

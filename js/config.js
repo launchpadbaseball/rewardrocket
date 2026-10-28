@@ -1,4 +1,4 @@
-// Reward Rocket — connection settings.
+// The Clubhouse — connection settings.
 //
 // Fill these in from Supabase → Project Settings → API (or "API Keys"):
 //   SUPABASE_URL  = the "Project URL", e.g. https://abcdefghijkl.supabase.co

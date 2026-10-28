@@ -3,56 +3,56 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Reward Rocket 🚀</title>
-  <meta name="description" content="Award points, track progress and redeem prizes.">
-  <meta name="theme-color" content="#1b1464">
+  <title>The Clubhouse</title>
+  <meta name="description" content="The Clubhouse: Earn Your Wins. Award XP, run the daily lineup and manage the Prize Locker.">
+  <meta name="theme-color" content="#0a0b0d">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Reward Rocket">
+  <meta name="apple-mobile-web-app-title" content="Clubhouse">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/clubhouse.css">
 </head>
 <body>
 
   <!-- Shown until js/config.js has the Supabase details -->
   <section id="screen-config" class="screen" hidden>
-    <div class="card">
-      <div class="big-logo">🚀</div>
-      <h1>Almost ready!</h1>
-      <p class="sub">Reward Rocket isn't connected to its database yet.</p>
-      <p>Open <b>js/config.js</b> and paste in your Supabase Project URL and publishable key. The README walks through it step by step.</p>
+    <div class="panel">
+      <span class="js-mark"></span>
+      <h1>The Clubhouse</h1>
+      <p class="tagline">Earn Your Wins</p>
+      <p class="sub">Not connected to its database yet. Add your Supabase details to <b>js/config.js</b> (see the README).</p>
     </div>
   </section>
 
   <!-- Login -->
   <section id="screen-login" class="screen" hidden>
-    <form class="card" id="login-form" autocomplete="on">
-      <div class="big-logo">🚀</div>
-      <h1>Reward Rocket</h1>
-      <p class="sub">Parents, sign in to blast off!</p>
-      <label class="field"><span>Email</span>
+    <form class="panel" id="login-form" autocomplete="on">
+      <span class="js-mark"></span>
+      <h1>The Clubhouse</h1>
+      <p class="tagline">Earn Your Wins</p>
+      <label class="field"><span class="label">Email</span>
         <input class="input" type="email" name="email" autocomplete="username" required inputmode="email" autocapitalize="off"></label>
-      <label class="field"><span>Password</span>
+      <label class="field"><span class="label">Password</span>
         <input class="input" type="password" name="password" autocomplete="current-password" required></label>
       <p class="err" id="login-err"></p>
-      <button class="btn block" type="submit">Sign in</button>
-      <p class="center"><button type="button" class="linkish" id="forgot">Forgot password?</button></p>
+      <button class="btn block" type="submit">Parent sign in</button>
+      <p class="center" style="margin:10px 0 0"><button type="button" class="linkish" id="forgot">Forgot password?</button></p>
     </form>
   </section>
 
   <!-- Choose a new password (after a reset email) -->
   <section id="screen-reset" class="screen" hidden>
-    <form class="card" id="reset-form">
-      <div class="big-logo">🔑</div>
+    <form class="panel" id="reset-form">
+      <span class="js-mark"></span>
       <h1>New password</h1>
-      <p class="sub">Pick a new password for Reward Rocket.</p>
-      <label class="field"><span>New password</span>
+      <p class="tagline">The Clubhouse</p>
+      <label class="field"><span class="label">New password</span>
         <input class="input" type="password" name="password" autocomplete="new-password" minlength="8" required></label>
       <p class="err" id="reset-err"></p>
       <button class="btn block" type="submit">Save password</button>
@@ -61,11 +61,11 @@
 
   <!-- Signed in, but not on the parents list -->
   <section id="screen-denied" class="screen" hidden>
-    <div class="card center">
-      <div class="big-logo">🛸</div>
-      <h1>Not on the crew list</h1>
-      <p class="sub" id="denied-email"></p>
-      <p>This account isn't one of the parent accounts. Add its email to the <b>parents</b> table in Supabase (see the README), then sign in again.</p>
+    <div class="panel center">
+      <span class="js-mark"></span>
+      <h1>Not on the roster</h1>
+      <p class="tagline" id="denied-email"></p>
+      <p class="sub">This account isn't a parent account. Add its email to the <b>parents</b> table in Supabase (see the README), then sign in again.</p>
       <button class="btn block" data-signout>Sign out</button>
     </div>
   </section>
@@ -74,44 +74,71 @@
   <main id="screen-app" hidden>
     <div class="wrap">
       <header class="topbar">
-        <div class="brand"><span class="logo">🚀</span> Reward Rocket</div>
-        <div class="sync" id="sync">Live</div>
+        <div class="brand"><span class="js-mark"></span>
+          <div><div class="brand-name">The Clubhouse</div><div class="brand-tag">Earn Your Wins</div></div></div>
+        <div class="top-actions">
+          <span class="sync" id="sync">Live</span>
+          <button class="icon-btn" id="btn-manage" aria-label="Front Office: manage the lineup, player card and account"></button>
+        </div>
       </header>
 
-      <!-- AWARD -->
-      <section data-tab="award">
-        <div class="card hero" id="hero"></div>
-        <button class="card j-banner" id="journal-banner" hidden></button>
-        <div id="tiles"></div>
-        <button class="btn green block" id="btn-bonus" style="margin-bottom:16px">🌟 Bonus points</button>
+      <!-- CLUBHOUSE -->
+      <section data-tab="clubhouse">
+        <div id="c-card"></div>
+        <div id="c-alerts"></div>
+        <div class="sec"><h2>Today’s Lineup</h2><button class="link" data-go="lineup">Award XP</button></div>
+        <div id="c-lineup"></div>
+        <div class="sec"><h2>My Stats</h2><span class="sub">This week</span></div>
+        <div id="c-stats"></div>
+        <div class="sec"><h2>Next Unlock</h2><button class="link" data-go="locker">Prize Locker</button></div>
+        <div id="c-unlock"></div>
+        <div class="sec"><h2>Recent Highlights</h2></div>
+        <div id="c-highlights"></div>
       </section>
 
-      <!-- PRIZES -->
-      <section data-tab="prizes" hidden>
-        <div class="section-title">Prize store <button class="btn sm white" id="btn-add-prize">＋ Add prize</button></div>
-        <div class="prizes" id="prize-list"></div>
-        <div class="card">
-          <h2>🎁 Prizes redeemed</h2>
-          <ul class="list" id="redeemed"></ul>
+      <!-- LINEUP -->
+      <section data-tab="lineup" hidden>
+        <h1 class="page-title">Daily Lineup</h1>
+        <div class="page-sub" id="l-date"></div>
+        <div class="panel" id="l-summary" style="margin-bottom:12px"></div>
+        <div id="l-pending"></div>
+        <div id="l-groups"></div>
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn" id="btn-bonus"></button>
+          <button class="btn dark" data-manage="lineup"></button>
         </div>
       </section>
 
-      <!-- JOURNAL -->
-      <section data-tab="journal" hidden>
-        <div class="section-title"><span id="journal-title">💬 Journal</span> <small>How he’s feeling</small></div>
-        <div class="card"><h2>🌈 Moods this week</h2><div class="mood-week" id="journal-week"></div></div>
+      <!-- PRIZE LOCKER -->
+      <section data-tab="locker" hidden>
+        <h1 class="page-title">Prize Locker</h1>
+        <div class="page-sub">Unlock gear and prizes with XP</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px">
+          <span class="bal-chip">Balance <b id="p-bal">0</b> XP</span>
+          <button class="btn sm" id="btn-add-prize"></button>
+        </div>
+        <div class="locker" id="prize-list"></div>
+        <div class="sec"><h2>Redeemed</h2></div>
+        <div class="panel"><ul class="list" id="redeemed"></ul></div>
+      </section>
+
+      <!-- STATS -->
+      <section data-tab="stats" hidden>
+        <h1 class="page-title">Stats</h1>
+        <div class="page-sub">Season to date</div>
+        <div class="sec" style="margin-top:6px"><h2>Weekly Box Score</h2></div>
+        <div id="s-box"></div>
+        <div class="sec"><h2>Season Stats</h2></div>
+        <div id="s-stats"></div>
+        <div class="sec"><h2>Trophy Case</h2></div>
+        <div id="s-trophies"></div>
+        <div class="sec"><h2>Road to the Hall</h2></div>
+        <div id="s-ladder"></div>
+        <div class="sec" id="postgame"><h2>Postgame Interviews</h2><span class="sub">How he’s feeling</span></div>
+        <div class="panel" id="s-moods" style="margin-bottom:12px"></div>
         <div id="journal-list"></div>
-      </section>
-
-      <!-- HISTORY -->
-      <section data-tab="history" hidden>
-        <div class="card">
-          <h2>📈 Last 7 days</h2>
-          <div class="week" id="week"></div>
-          <div class="summary" id="summary"></div>
-        </div>
-        <div class="card">
-          <h2>📜 Points history</h2>
+        <div class="sec"><h2>Game Log</h2></div>
+        <div class="panel">
           <div class="chips" id="filters">
             <button class="chip on" data-f="all">All</button>
             <button class="chip" data-f="earn">Earned</button>
@@ -119,44 +146,64 @@
             <button class="chip" data-f="redeem">Prizes</button>
           </div>
           <div id="history"></div>
-          <button class="btn ghost block" id="load-older" hidden>Load older</button>
+          <button class="btn ghost block" id="load-older" style="margin-top:10px" hidden>Load older</button>
         </div>
       </section>
 
-      <!-- SETUP -->
-      <section data-tab="setup" hidden>
-        <div class="card">
-          <h2>⭐ Behaviors &amp; points</h2>
-          <ul class="list" id="behavior-admin"></ul>
-          <button class="btn block" id="btn-add-behavior" style="margin-top:10px">＋ Add behavior</button>
-        </div>
-        <div class="card">
-          <h2>🧒 Kid's dashboard</h2>
+      <!-- FRONT OFFICE (parent management) -->
+      <section data-tab="manage" hidden>
+        <button class="link" data-go="clubhouse" style="display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px" id="manage-back"></button>
+        <h1 class="page-title">Front Office</h1>
+        <div class="page-sub">Parent controls</div>
+        <div id="upgrade-note"></div>
+
+        <div class="sec"><h2>Player Card</h2></div>
+        <div class="panel">
           <div class="photo-pick" style="margin-bottom:14px">
-            <div class="avatar lg" id="avatar-thumb"></div>
+            <div class="thumb portrait shot" id="avatar-thumb"></div>
             <div style="display:flex;flex-direction:column;gap:8px">
-              <label class="btn sm">📷 Profile photo<input type="file" accept="image/*" hidden id="avatar-file"></label>
+              <label class="btn sm dark" id="avatar-pick"><input type="file" accept="image/*" hidden id="avatar-file"></label>
               <button type="button" class="btn sm ghost" id="avatar-remove" hidden>Remove photo</button>
             </div>
           </div>
-          <label class="field"><span>Name</span>
-            <div class="stepper"><input class="input" id="kid-name" maxlength="30" style="text-align:left;font-size:16px;font-weight:600"><button class="btn sm" id="save-kid-name" style="width:auto">Save</button></div></label>
-          <label class="field" id="journal-points-row" hidden><span>📝 Points for sharing his day (0 = off)</span>
+          <label class="field"><span class="label">Player name</span><input class="input" id="kid-name" maxlength="30"></label>
+          <div class="row2">
+            <label class="field"><span class="label">Jersey #</span><input class="input" id="kid-jersey" inputmode="numeric" maxlength="2" placeholder="e.g. 7"></label>
+            <label class="field"><span class="label">Position</span><input class="input" id="kid-position" maxlength="12" placeholder="e.g. SS / P"></label>
+          </div>
+          <button class="btn block" id="save-card">Save player card</button>
+        </div>
+
+        <div class="sec" id="manage-lineup"><h2>Lineup &amp; XP Values</h2></div>
+        <div class="panel">
+          <ul class="list admin-list" id="behavior-admin"></ul>
+          <button class="btn block dark" id="btn-add-behavior" style="margin-top:10px"></button>
+        </div>
+
+        <div class="sec"><h2>Postgame Interview</h2></div>
+        <div class="panel">
+          <label class="field" id="journal-points-row" hidden><span class="label">XP for answering (0 = off)</span>
             <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" id="journal-points" type="number" inputmode="numeric" min="0" max="50"><button type="button" data-step="1">+</button><button class="btn sm" id="save-journal-points">Save</button></div></label>
-          <p class="muted" style="margin:0 0 10px">A view-only page for him: points, prizes and progress. It can't change anything. Open it on his tablet and add it to the home screen.</p>
-          <code class="box" id="kid-link"></code>
-          <div class="btns" style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-            <button class="btn sm" id="copy-kid-link">📋 Copy link</button>
-            <a class="btn sm pink" id="open-kid-link" target="_blank" rel="noopener">👀 Open</a>
-            <button class="btn sm ghost" id="new-kid-link">🔄 New link</button>
+          <p class="muted" style="margin:0;font-size:13.5px">He answers a new question each day on his dashboard. You read his answers and reply under Stats → Postgame Interviews.</p>
+        </div>
+
+        <div class="sec"><h2>Player Dashboard Link</h2></div>
+        <div class="panel">
+          <p class="muted" style="margin:0 0 10px;font-size:13.5px">His own view: player card, lineup, Prize Locker and stats. He can check in tasks for your approval and answer his postgame question, but he can’t award XP or redeem prizes. Open it on his device and add it to the home screen.</p>
+          <code class="code" id="kid-link"></code>
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn sm" id="copy-kid-link"></button>
+            <a class="btn sm dark" id="open-kid-link" target="_blank" rel="noopener"></a>
+            <button class="btn sm ghost" id="new-kid-link"></button>
           </div>
         </div>
-        <div class="card">
-          <h2>👤 Account</h2>
-          <p class="muted" id="who" style="margin-top:0"></p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn sm ghost" id="change-pw">🔑 Change password</button>
-            <button class="btn sm ghost" data-signout>🚪 Sign out</button>
+
+        <div class="sec"><h2>Account</h2></div>
+        <div class="panel">
+          <p class="muted" id="who" style="margin:0 0 10px;font-size:13.5px"></p>
+          <div class="btn-row">
+            <button class="btn sm dark" id="change-pw"></button>
+            <button class="btn sm ghost" data-signout id="signout"></button>
           </div>
         </div>
       </section>
@@ -164,11 +211,10 @@
 
     <nav class="nav" aria-label="Main">
       <div class="in">
-        <button data-go="award" class="on"><span>🚀</span>Award</button>
-        <button data-go="prizes"><span>🎁</span>Prizes</button>
-        <button data-go="journal"><span>💬</span>Journal<i class="dot" id="journal-dot" hidden></i></button>
-        <button data-go="history"><span>📜</span>History</button>
-        <button data-go="setup"><span>⚙️</span>Setup</button>
+        <button data-go="clubhouse" class="on" id="nav-clubhouse"></button>
+        <button data-go="lineup" id="nav-lineup"></button>
+        <button data-go="locker" id="nav-locker"></button>
+        <button data-go="stats" id="nav-stats"></button>
       </div>
     </nav>
   </main>

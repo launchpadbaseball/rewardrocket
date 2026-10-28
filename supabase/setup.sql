@@ -1,5 +1,5 @@
 -- ============================================================================
--- Reward Rocket 🚀 — database setup
+-- The Clubhouse — database setup
 --
 -- Paste this whole file into Supabase → SQL Editor → New query → Run.
 -- It is safe to run more than once.
@@ -153,6 +153,57 @@ drop policy if exists "parents all" on public.journal;
 create policy "parents all" on public.journal for all to authenticated using (public.is_parent()) with check (public.is_parent());
 grant select, insert, update, delete on public.journal to authenticated;
 
+-- The Clubhouse: player card details, "Pending Approval" requests and stats.
+alter table public.settings add column if not exists jersey_number text
+  check (jersey_number ~ '^[0-9]{1,2}$');
+alter table public.settings add column if not exists position text
+  check (length(position) <= 12);
+
+-- Jaylen can tap "I did it" on a lineup item; it waits here until a parent
+-- approves it (which awards the XP) or declines it.
+create table if not exists public.lineup_requests (
+  id           uuid primary key default gen_random_uuid(),
+  behavior_id  uuid not null references public.behaviors(id) on delete cascade,
+  day          date not null,
+  created_at   timestamptz not null default now(),
+  unique (behavior_id, day)
+);
+
+alter table public.lineup_requests enable row level security;
+drop policy if exists "parents all" on public.lineup_requests;
+create policy "parents all" on public.lineup_requests for all to authenticated using (public.is_parent()) with check (public.is_parent());
+grant select, insert, update, delete on public.lineup_requests to authenticated;
+
+-- Career stats. Lifetime XP only counts XP earned, so redeeming a prize
+-- never lowers his player level.
+create or replace function public.player_stats_internal()
+returns json
+language sql stable security definer set search_path = public
+as $$
+  select json_build_object(
+    'lifetime_xp',     coalesce((select sum(points) from public.ledger where points > 0 and kind <> 'redeem'), 0),
+    'tasks_completed', (select count(*) from public.ledger where kind = 'earn'),
+    'redeemed_count',  (select count(*) from public.ledger where kind = 'redeem'),
+    'sports_count',    (select count(*) from public.ledger l join public.behaviors b on b.id = l.behavior_id
+                        where l.kind = 'earn' and b.category = 'sports'),
+    'journal_count',   (select count(*) from public.journal),
+    'active_days',     coalesce((select json_agg(d order by d desc) from (
+                          select distinct day as d from public.ledger
+                          where points > 0 and kind <> 'redeem' and day > current_date - 400) x), '[]'::json)
+  );
+$$;
+revoke execute on function public.player_stats_internal() from public, anon, authenticated;
+
+-- The same stats for the parent app (parents only).
+create or replace function public.player_stats()
+returns json
+language sql stable security definer set search_path = public
+as $$
+  select case when public.is_parent() then public.player_stats_internal() end;
+$$;
+revoke execute on function public.player_stats() from public, anon;
+grant execute on function public.player_stats() to authenticated;
+
 -- Current point balance (0 for anyone who isn't a parent).
 create or replace function public.balance()
 returns int
@@ -217,6 +268,11 @@ as $$
     'kid_name',  s.kid_name,
     'avatar_url', s.avatar_url,
     'journal_points', s.journal_points,
+    'jersey_number', s.jersey_number,
+    'position',  s.position,
+    'stats',     public.player_stats_internal(),
+    'pending',   coalesce((select json_agg(json_build_object('behavior_id', q.behavior_id, 'day', q.day))
+                  from public.lineup_requests q where q.day >= current_date - 1), '[]'::json),
     'balance',   (select coalesce(sum(points), 0) from public.ledger),
     'behaviors', coalesce((select json_agg(json_build_object(
                     'id', b.id, 'name', b.name, 'emoji', b.emoji,
@@ -293,13 +349,45 @@ $$;
 revoke execute on function public.kid_save_journal(uuid, date, text, text, text) from public;
 grant execute on function public.kid_save_journal(uuid, date, text, text, text) to anon, authenticated;
 
+-- Jaylen marks a lineup item as done from his dashboard. It does NOT award
+-- XP: it only asks. A parent approves it (awarding the XP) or declines it.
+create or replace function public.kid_request_task(p_token uuid, p_behavior_id uuid, p_day date)
+returns boolean
+language plpgsql volatile security definer set search_path = public
+as $$
+declare
+  b public.behaviors;
+begin
+  if not exists (select 1 from public.settings where id = 1 and kid_token = p_token) then
+    raise exception 'This link is old. Ask Mom or Dad for the new one.';
+  end if;
+  if p_day not between current_date - 1 and current_date + 1 then
+    raise exception 'You can only check in for today.';
+  end if;
+  select * into b from public.behaviors where id = p_behavior_id;
+  if not found then
+    raise exception 'That item is no longer in the lineup.';
+  end if;
+  if b.once_daily and exists (select 1 from public.ledger
+                              where behavior_id = b.id and day = p_day and kind = 'earn') then
+    raise exception 'Already completed today.';
+  end if;
+  insert into public.lineup_requests (behavior_id, day) values (b.id, p_day)
+  on conflict do nothing;
+  return true;
+end;
+$$;
+
+revoke execute on function public.kid_request_task(uuid, uuid, date) from public;
+grant execute on function public.kid_request_task(uuid, uuid, date) to anon, authenticated;
+
 
 -- 6. Live updates between the two phones --------------------------------------
 
 do $$
 declare t text;
 begin
-  foreach t in array array['ledger', 'behaviors', 'rewards', 'settings', 'journal'] loop
+  foreach t in array array['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'lineup_requests'] loop
     if not exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t

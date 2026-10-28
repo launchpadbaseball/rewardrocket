@@ -1,11 +1,12 @@
 {
-  "name": "Reward Rocket",
-  "short_name": "Reward Rocket",
+  "name": "The Clubhouse",
+  "short_name": "Clubhouse",
+  "description": "Earn Your Wins.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0b1033",
-  "theme_color": "#1b1464",
+  "background_color": "#0a0b0d",
+  "theme_color": "#0a0b0d",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }

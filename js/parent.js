@@ -1,41 +1,59 @@
-// Reward Rocket — the parent app (index.html).
+// The Clubhouse — the parent app (index.html).
 //
 // Everything lives in Supabase (see supabase/setup.sql). Both parents read and
 // write the same tables; a realtime subscription reloads this phone whenever
-// the other phone changes something.
+// the other phone (or Jaylen's dashboard) changes something.
 
 (() => {
-  const { client: db, esc, $, $$, localDay, stats, nextPrize, pct, toast, confetti, signed } = RR;
+  const { client: db, esc, $, $$, localDay, toast, burst, icon, fmt, store } = RR;
 
-  const EMOJIS = ['⭐', '🎒', '📚', '👂', '🤝', '🧹', '💛', '🧘', '🌙', '🏫', '🦷', '🛏️', '🍽️', '🐶', '📖', '🎹', '🧺', '🚿', '😊', '🙏',
-    '🏆', '⚾', '⚽', '🏀', '🏈', '🧤', '🙌', '💨', '📣', '💪', '🧢', '👏', '🏃', '🥅'];
-  // Behaviors are shown in two sections. Sports is about his approach to the game, not results.
-  const GROUPS = [
-    { key: 'home', title: '🏠 Home & School' },
-    { key: 'sports', title: '🏅 Sports & Team', note: 'Effort & attitude, not the score' }
-  ];
-  const catOf = b => b.category === 'sports' ? 'sports' : 'home';
-  const grouped = () => GROUPS.map(g => ({ ...g, items: state.behaviors.filter(b => catOf(b) === g.key) }));
-  const PRIZE_EMOJIS = ['🎁', '🧸', '🟣', '🌈', '🍦', '🎮', '📺', '🍕', '🎟️', '🧩', '🪀', '🦖', '🚗', '📚', '🍫', '🌟'];
   const HISTORY_DAYS = 35;   // loaded up front; older entries via "Load older"
   const REPEAT_WARN_MS = 90 * 1000;
+  const QUICK_REPLIES = ['Proud of you.', 'Love you, buddy.', 'Thanks for telling us.', 'Let’s talk about it tonight.', 'That’s the effort we want to see.'];
+  const BONUS_REASONS = ['Extra effort', 'Great attitude', 'Above and beyond', 'Helped a teammate', 'Clutch moment'];
 
   const state = {
     user: null,
     settings: null,
     behaviors: [],
     rewards: [],
-    ledger: [],       // newest first
+    ledger: [],          // newest first
     redeemed: [],
-    journal: [],          // newest day first
-    journalMissing: false, // true until supabase/add-journal.sql has been run
+    journal: [],         // newest day first
+    requests: [],        // "I did it" check-ins from his dashboard
+    stats: null,         // career stats (lifetime XP etc.)
+    journalMissing: false,
+    clubMissing: false,  // true until supabase/add-clubhouse.sql has been run
     balance: 0,
-    tab: 'award',
+    tab: 'clubhouse',
+    prevTab: 'clubhouse',
     filter: 'all',
+    logLimit: 30,       // game log rows shown; "Show more" raises it
     olderDone: false
   };
 
-  RR.starfield();
+  // ---------------------------------------------------------------- chrome
+  $$('.js-mark').forEach(el => { el.outerHTML = RR.brandMark(el.closest('.topbar') ? 'brand-mark' : 'hero-mark'); });
+  const label = (sel, ic, text) => { const el = $(sel); if (el) el.innerHTML = icon(ic) + `<span>${text}</span>`; };
+  label('#nav-clubhouse', 'clubhouse', 'Clubhouse');
+  label('#nav-lineup', 'lineup', 'Lineup');
+  label('#nav-locker', 'locker', 'Prize Locker');
+  label('#nav-stats', 'stats', 'Stats');
+  $('#nav-stats').insertAdjacentHTML('beforeend', '<i class="dot" id="stats-dot" hidden></i>');
+  $('#btn-manage').innerHTML = icon('gear');
+  label('#btn-bonus', 'plus', 'Bonus XP');
+  label('[data-manage="lineup"]', 'edit', 'Edit lineup');
+  label('#btn-add-prize', 'plus', 'Add prize');
+  label('#btn-add-behavior', 'plus', 'Add to lineup');
+  const avatarInput = $('#avatar-file');
+  label('#avatar-pick', 'camera', 'Player photo');
+  $('#avatar-pick').prepend(avatarInput);
+  label('#copy-kid-link', 'copy', 'Copy');
+  label('#open-kid-link', 'eye', 'Open');
+  label('#new-kid-link', 'refresh', 'New link');
+  label('#change-pw', 'key', 'Change password');
+  label('#signout', 'logout', 'Sign out');
+  $('#manage-back').innerHTML = icon('back', 'sm') + 'Back';
 
   // ---------------------------------------------------------------- screens
   function show(id) {
@@ -71,9 +89,9 @@
     e.preventDefault();
     const f = e.target, btn = f.querySelector('button[type=submit]');
     $('#login-err').textContent = '';
-    btn.disabled = true; btn.textContent = 'Launching…';
+    btn.disabled = true; btn.textContent = 'Signing in…';
     const { error } = await db.auth.signInWithPassword({ email: f.email.value.trim(), password: f.password.value });
-    btn.disabled = false; btn.textContent = 'Sign in';
+    btn.disabled = false; btn.textContent = 'Parent sign in';
     if (error) $('#login-err').textContent = /invalid/i.test(error.message) ? 'That email or password is not right.' : error.message;
   });
 
@@ -82,14 +100,14 @@
     if (!email) { $('#login-err').textContent = 'Type your email above first, then tap "Forgot password?".'; return; }
     const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
     $('#login-err').textContent = '';
-    toast(error ? error.message : 'Check your email for a reset link 📬', { warn: !!error, ms: 6000 });
+    toast(error ? error.message : 'Check your email for a reset link.', { warn: !!error, ms: 6000 });
   });
 
   $('#reset-form').addEventListener('submit', async e => {
     e.preventDefault();
     const { error } = await db.auth.updateUser({ password: e.target.password.value });
     if (error) { $('#reset-err').textContent = error.message; return; }
-    toast('Password saved ✅');
+    toast('Password saved');
     $('#screen-reset').hidden = true;
     const { data } = await db.auth.getSession();
     onSession(data.session);
@@ -102,8 +120,8 @@
   });
 
   $('#change-pw').addEventListener('click', () => {
-    const s = sheet(`<h3>🔑 Change password</h3>
-      <label class="field"><span>New password (8+ characters)</span><input class="input" type="password" name="pw" minlength="8" autocomplete="new-password"></label>
+    const s = sheet(`<h3>Change password</h3>
+      <label class="field"><span class="label">New password (8+ characters)</span><input class="input" type="password" name="pw" minlength="8" autocomplete="new-password"></label>
       <p class="err"></p>
       <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-save>Save</button></div>`);
     s.on('[data-save]', async () => {
@@ -111,7 +129,7 @@
       if (pw.length < 8) { s.err('Use at least 8 characters.'); return; }
       const { error } = await db.auth.updateUser({ password: pw });
       if (error) { s.err(error.message); return; }
-      s.close(); toast('Password changed ✅');
+      s.close(); toast('Password changed');
     });
   });
 
@@ -124,14 +142,16 @@
 
   async function loadAll() {
     const since = new Date(); since.setDate(since.getDate() - HISTORY_DAYS);
-    const [s, b, r, l, bal, red, jr] = await Promise.all([
+    const [s, b, r, l, bal, red, jr, ps, rq] = await Promise.all([
       db.from('settings').select('*').eq('id', 1).maybeSingle(),
       db.from('behaviors').select('*').order('sort').order('created_at'),
       db.from('rewards').select('*').order('cost').order('sort'),
       db.from('ledger').select('*').gte('created_at', since.toISOString()).order('created_at', { ascending: false }).limit(1000),
       db.rpc('balance'),
       db.from('ledger').select('*').eq('kind', 'redeem').order('created_at', { ascending: false }).limit(50),
-      db.from('journal').select('*').order('day', { ascending: false }).limit(60)
+      db.from('journal').select('*').order('day', { ascending: false }).limit(60),
+      db.rpc('player_stats'),
+      db.from('lineup_requests').select('*').order('created_at')
     ]);
     const err = [s, b, r, l, bal, red].find(x => x.error);
     if (err) { toast(friendly(err.error), { warn: true }); return; }
@@ -145,9 +165,12 @@
     state.ledger = l.data.concat(older);
     state.redeemed = red.data;
     state.balance = bal.data;
-    // The journal is optional: an older database without it still works.
+    // Optional pieces: an older database without them still works.
     state.journalMissing = !!jr.error;
     state.journal = jr.error ? [] : jr.data;
+    state.clubMissing = !!(ps.error || rq.error);
+    state.stats = ps.error ? null : ps.data;
+    state.requests = rq.error ? [] : rq.data;
     render();
   }
 
@@ -158,12 +181,12 @@
   function subscribe() {
     if (channel) return;
     channel = db.channel('family');
-    ['ledger', 'behaviors', 'rewards', 'settings', 'journal'].forEach(table =>
+    ['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'lineup_requests'].forEach(table =>
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, reloadSoon));
     channel.subscribe(status => {
       const live = status === 'SUBSCRIBED';
       $('#sync').classList.toggle('off', !live);
-      $('#sync').textContent = live ? 'Live' : 'Reconnecting…';
+      $('#sync').textContent = live ? 'Live' : 'Reconnecting';
       if (live) reloadSoon();
     });
   }
@@ -172,126 +195,165 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden && started) loadAll(); });
   window.addEventListener('online', () => { if (started) loadAll(); });
 
-  // ---------------------------------------------------------------- render
-  function render() {
-    renderHero(); renderTiles(); renderPrizes(); renderHistory(); renderSetup(); renderJournal();
-  }
-
+  // ---------------------------------------------------------------- model
   const kidName = () => (state.settings && state.settings.kid_name) || 'Jaylen';
-  const avatarHtml = () => {
-    const url = state.settings && state.settings.avatar_url;
-    return `<span class="avatar">${url ? `<img src="${esc(url)}" alt="">` : '🧑‍🚀'}</span>`;
-  };
+  const todayRequests = () => state.requests.filter(q => q.day === localDay());
 
-  function renderHero() {
-    const st = stats(state.ledger);
-    const next = nextPrize(state.rewards, state.balance);
-    const hero = $('#hero');
-    if (!hero.dataset.ready) {
-      hero.innerHTML = `<div class="rocket" aria-hidden="true">🚀</div>
-        <div class="kid"></div>
-        <div class="bal"><b id="bal-num">0</b><span>points</span></div>
-        <div class="stats">
-          <div class="stat"><b id="today-num">0</b><span>earned today</span></div>
-          <div class="stat"><b id="week-num">0</b><span>earned this week</span></div>
-        </div>
-        <div class="next" id="hero-next"></div>`;
-      hero.dataset.ready = 1;
+  function model() {
+    return RR.model({
+      ...(state.settings || {}),
+      balance: state.balance,
+      behaviors: state.behaviors,
+      rewards: state.rewards,
+      recent: state.ledger,
+      journal: state.journal,
+      stats: state.stats,
+      pending: state.clubMissing ? null : state.requests
+    });
+  }
+
+  // ---------------------------------------------------------------- render
+  let shownBalance = null;
+  function render() {
+    const m = model();
+    renderClubhouse(m); renderLineup(m); renderLocker(m); renderStats(m); renderManage();
+    shownBalance = m.balance;
+  }
+
+  function renderClubhouse(m) {
+    $('#c-card').innerHTML = RR.playerCard(m);
+    const bal = $('#c-card .js-bal');
+    if (shownBalance !== null && shownBalance !== m.balance) { bal.dataset.v = shownBalance; RR.countTo(bal, m.balance); }
+
+    // Alerts: check-ins waiting for approval, and a new postgame interview.
+    const reqs = todayRequests();
+    let alerts = '';
+    if (reqs.length) {
+      alerts += `<div class="panel" style="margin-top:12px;border-color:rgba(255,176,32,.5)">
+        <h3 style="display:flex;align-items:center;gap:8px;color:var(--amber)">${icon('clock')}Pending Approval</h3>
+        ${reqs.map(q => {
+          const b = state.behaviors.find(x => x.id === q.behavior_id);
+          if (!b) return '';
+          return `<div class="req"><div><b>${esc(b.name)}</b><small>Checked in ${RR.timeOf(q.created_at)} · +${b.points} XP</small></div>
+            <button class="btn sm green" data-approve="${b.id}">Approve</button>
+            <button class="btn sm ghost" data-decline="${q.id}" aria-label="Decline">${icon('x', 'sm')}</button></div>`;
+        }).join('')}</div>`;
     }
-    hero.querySelector('.kid').innerHTML = avatarHtml() + `<span>${esc(kidName())}’s balance</span>`;
-    RR.countTo($('#bal-num'), state.balance);
-    $('#today-num').textContent = '+' + st.todayPts;
-    $('#week-num').textContent = '+' + st.weekPts;
-    $('#hero-next').innerHTML = next
-      ? `${next.cost - state.balance} more to <b>${esc(next.emoji)} ${esc(next.name)}</b><div class="bar"><i style="width:${pct(state.balance, next.cost)}%"></i></div>`
-      : state.rewards.length ? '🎉 Enough points for every prize!' : '';
+    if (journalUnread()) {
+      const j = state.journal[0];
+      alerts += `<button class="alert" data-open-journal>${icon('mic')}
+        <span class="grow"><b>New postgame interview</b><small>${esc(kidName())} is feeling ${esc(RR.mood(j.mood).label.toLowerCase())} ${RR.mood(j.mood).emoji}. Tap to read and reply.</small></span>${icon('right', 'sm')}</button>`;
+    }
+    $('#c-alerts').innerHTML = alerts;
+
+    // Today's lineup at a glance: what's still available, pending first.
+    const open = m.lineup.filter(b => b.status !== 'done').sort((a, b) => (b.status === 'pending') - (a.status === 'pending'));
+    $('#c-lineup').innerHTML = `<div class="panel">${RR.lineupSummary(m)}</div>` +
+      (open.length ? `<div class="lineup" style="margin-top:12px">${open.slice(0, 4).map(b => RR.lineupRow(b, 'parent', true)).join('')}</div>`
+        : '<p class="muted" style="margin:10px 2px 0">Every daily item is done. Great day.</p>') +
+      (open.length > 4 ? `<button class="btn ghost block sm" data-go="lineup" style="margin-top:10px">Full lineup · ${m.lineup.length}</button>` : '');
+    $('#c-stats').innerHTML = RR.statGrid(m);
+    $('#c-unlock').innerHTML = RR.nextUnlock(m);
+    $('#c-highlights').innerHTML = RR.highlights(m);
   }
 
-  function todayEarns(behaviorId) {
-    const today = localDay();
-    return state.ledger.filter(r => r.kind === 'earn' && r.behavior_id === behaviorId && r.day === today);
+  function renderLineup(m) {
+    $('#l-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · Tap to award XP';
+    $('#l-summary').innerHTML = `<span class="label" style="margin-bottom:8px">Completed today</span>` + RR.lineupSummary(m) +
+      `<p class="muted" style="margin:10px 0 0;font-size:13px">+${m.todayXP} XP today · Tapped by mistake? Hit Undo.</p>`;
+    $('#l-groups').innerHTML = RR.lineupGroups(m, 'parent');
   }
 
-  function renderTiles() {
-    const box = $('#tiles');
-    if (!state.behaviors.length) { box.innerHTML = '<div class="card empty">No behaviors yet. Add some in ⚙️ Setup.</div>'; return; }
-    box.innerHTML = grouped().filter(g => g.items.length).map(g => `
-      <div class="section-title">${g.title} <small>${g.note || 'Tap to award'}</small></div>
-      <div class="tiles ${g.key}">${g.items.map(tileHtml).join('')}</div>`).join('');
+  function renderLocker(m) {
+    $('#p-bal').textContent = fmt(m.balance);
+    $('#prize-list').innerHTML = m.rewards.length ? m.rewards.map(r => RR.lockerItem(r, m.balance, 'parent')).join('')
+      : '<div class="panel empty" style="grid-column:1/-1">The locker is empty. Add a prize.</div>';
+    $('#redeemed').innerHTML = state.redeemed.length ? state.redeemed.map(r => `<li><span class="mark redeem">${icon('gift', 'sm')}</span>
+        <span class="grow"><b>${esc(r.reason)}</b><small>${RR.dayLabel(r.day)} · ${RR.timeOf(r.created_at)}${who(r)}</small></span>
+        <span class="delta redeem">${RR.signed(r.points)}</span></li>`).join('')
+      : '<li class="empty" style="display:block">Nothing redeemed yet.</li>';
   }
 
-  function tileHtml(b) {
-    const n = todayEarns(b.id).length;
-    const done = b.once_daily && n > 0;
-    const tag = done ? '✓ Done today' : b.once_daily ? 'Once a day' : n ? `✓ ${n}× today` : 'Any time';
-    return `<button class="tile${done ? ' done' : ''}" data-b="${b.id}">
-      <span class="pts">+${b.points}</span>
-      <span class="emo">${esc(b.emoji)}</span>
-      <span class="nm">${esc(b.name)}</span>
-      <span class="tag">${tag}</span>
-    </button>`;
+  const who = r => r.created_by ? ' · ' + esc(r.created_by.split('@')[0]) : '';
+
+  function renderStats(m) {
+    $('#s-box').innerHTML = RR.boxScore(m);
+    $('#s-stats').innerHTML = RR.statGrid(m, true);
+    $('#s-trophies').innerHTML = RR.trophyCase(m);
+    $('#s-ladder').innerHTML = RR.ladder(m);
+    renderJournal();
+    renderHistory();
   }
 
-  $('#tiles').addEventListener('click', e => {
-    const t = e.target.closest('.tile');
-    if (t) award(t.dataset.b, t);
-  });
-
+  // ---------------------------------------------------------------- awarding
   const busy = new Set();
-  async function award(id, tile) {
+  async function award(id, row) {
     const b = state.behaviors.find(x => x.id === id);
     if (!b || busy.has(id)) return;
-    const earns = todayEarns(id);
-    if (b.once_daily && earns.length) {
-      toast(`${b.emoji} Already earned today — once a day only.`);
-      return;
-    }
+    const today = localDay();
+    const earns = state.ledger.filter(r => r.kind === 'earn' && r.behavior_id === id && r.day === today);
+    if (b.once_daily && earns.length) { toast(`${b.name}: already completed today.`); return; }
     if (!b.once_daily && earns.length && Date.now() - new Date(earns[0].created_at).getTime() < REPEAT_WARN_MS) {
-      if (!await confirmSheet(`Award again?`, `“${b.name}” was just awarded a moment ago. Give another +${b.points}?`, 'Yes, award again')) return;
+      if (!await confirmSheet('Award again?', `“${b.name}” was awarded a moment ago. Give another +${b.points} XP?`, 'Award again')) return;
     }
     busy.add(id);
-    tile.classList.remove('pop'); void tile.offsetWidth; tile.classList.add('pop');
+    if (row) { row.classList.remove('pop'); void row.offsetWidth; row.classList.add('pop'); }
+    const before = model();
     const { data, error } = await db.from('ledger').insert({
-      day: localDay(), kind: 'earn', points: b.points, reason: b.name, emoji: b.emoji,
+      day: today, kind: 'earn', points: b.points, reason: b.name, emoji: b.emoji,
       behavior_id: b.id, once_daily: b.once_daily
     }).select().single();
     busy.delete(id);
     if (error) {
-      if (error.code === '23505') toast(`${b.emoji} Already earned today (maybe the other parent just did it).`);
+      if (error.code === '23505') toast(`${b.name}: already completed today (maybe the other parent just did it).`);
       else toast(friendly(error), { warn: true });
       loadAll();
       return;
     }
+    // A check-in for this item is now settled.
+    const req = todayRequests().find(q => q.behavior_id === b.id);
+    if (req) { db.from('lineup_requests').delete().eq('id', req.id).then(() => {}); state.requests = state.requests.filter(q => q !== req); }
     state.ledger.unshift(data);
     state.balance += b.points;
-    const before = state.balance - b.points;
-    const unlocked = state.rewards.filter(r => r.cost > before && r.cost <= state.balance);
+    if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + b.points, tasks_completed: state.stats.tasks_completed + 1 };
     render();
-    confetti(unlocked.length ? ['🎉', '🎁', '⭐', '🚀'] : undefined, unlocked.length ? 50 : 24);
-    toast(`+${b.points} ${b.emoji} ${b.name}` + (unlocked.length ? ` — ${unlocked[0].name} unlocked! 🎉` : ''),
-      { action: { label: 'Undo', run: () => undo(data) } });
+    announce(before, model(), `+${b.points} XP · ${b.name}`, () => undo(data));
+  }
+
+  // Toast for an award, plus level-ups and prizes that just unlocked.
+  function announce(before, after, msg, undoFn) {
+    const unlocked = after.rewards.filter(r => r.cost > before.balance && r.cost <= after.balance);
+    const levelUp = after.level.idx > before.level.idx;
+    if (levelUp) msg += ` · Level up: ${after.level.name}`;
+    else if (unlocked.length) msg += ` · ${unlocked[0].name} unlocked`;
+    if (levelUp || unlocked.length) burst(levelUp ? 60 : 36);
+    toast(msg, { action: { label: 'Undo', run: undoFn } });
   }
 
   async function undo(row) {
     const { error } = await db.from('ledger').delete().eq('id', row.id);
     if (error) { toast(friendly(error), { warn: true }); return; }
-    toast('Undone ↩️');
+    toast('Undone');
     state.ledger = state.ledger.filter(x => x.id !== row.id);
     loadAll();
   }
 
-  // ----- Bonus points (the app only ever adds points; prizes are the only thing that spends them)
-  $('#btn-bonus').addEventListener('click', bonusSheet);
+  async function decline(reqId) {
+    const { error } = await db.from('lineup_requests').delete().eq('id', reqId);
+    if (error) { toast(friendly(error), { warn: true }); return; }
+    toast('Check-in declined');
+    loadAll();
+  }
 
-  function bonusSheet() {
-    const reasons = ['Extra helpful', 'Great attitude', 'Tried something hard', 'Helped a sibling', 'Above and beyond'];
-    const s = sheet(`<h3>🌟 Bonus points</h3>
-      <label class="field"><span>How many points?</span>
+  // Bonus XP (the app only ever adds XP; prizes are the only thing that spends it)
+  $('#btn-bonus').addEventListener('click', () => {
+    const s = sheet(`<h3>Bonus XP</h3>
+      <label class="field"><span class="label">How much XP?</span>
         <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" name="amt" type="number" inputmode="numeric" min="1" value="2"><button type="button" data-step="1">+</button></div></label>
-      <label class="field"><span>Reason</span><input class="input" name="reason" maxlength="80" placeholder="Why?"></label>
-      <div class="chips">${reasons.map(r => `<button type="button" class="chip" data-reason="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+      <label class="field"><span class="label">Reason</span><input class="input" name="reason" maxlength="80" placeholder="What did he do?"></label>
+      <div class="chips">${BONUS_REASONS.map(r => `<button type="button" class="chip" data-reason="${esc(r)}">${esc(r)}</button>`).join('')}</div>
       <p class="err"></p>
-      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn green" data-save>Add points</button></div>`);
+      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-save>Add XP</button></div>`);
     stepper(s.el);
     s.el.querySelectorAll('[data-reason]').forEach(c => c.addEventListener('click', () => {
       s.el.querySelector('[name=reason]').value = c.dataset.reason;
@@ -300,94 +362,65 @@
     s.on('[data-save]', async btn => {
       const amt = parseInt(s.el.querySelector('[name=amt]').value, 10);
       const reason = s.el.querySelector('[name=reason]').value.trim();
-      if (!(amt > 0)) { s.err('Enter a number of points.'); return; }
+      if (!(amt > 0)) { s.err('Enter an amount of XP.'); return; }
       if (!reason) { s.err('Add a short reason so you both know why.'); return; }
       btn.disabled = true;
-      const { data, error } = await db.from('ledger').insert({
-        day: localDay(), kind: 'adjust', points: amt, reason, emoji: '🌟'
-      }).select().single();
+      const before = model();
+      const { data, error } = await db.from('ledger').insert({ day: localDay(), kind: 'adjust', points: amt, reason, emoji: '⭐' }).select().single();
       btn.disabled = false;
       if (error) { s.err(friendly(error)); return; }
       s.close();
-      confetti();
-      toast(`+${amt} points · ${reason}`, { action: { label: 'Undo', run: () => undo(data) } });
+      state.ledger.unshift(data);
+      state.balance += amt;
+      if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + amt };
+      render();
+      announce(before, model(), `+${amt} XP · ${reason}`, () => undo(data));
       loadAll();
     });
-  }
+  });
 
-  // ---------------------------------------------------------------- prizes
-  function renderPrizes() {
-    const bal = state.balance;
-    $('#prize-list').innerHTML = state.rewards.length ? state.rewards.map(r => {
-      const ready = bal >= r.cost;
-      return `<article class="prize${ready ? ' ready' : ''}">
-        <button class="icon-btn edit" data-edit-prize="${r.id}" aria-label="Edit ${esc(r.name)}">✏️</button>
-        <div class="pic">${r.image_url ? `<img src="${esc(r.image_url)}" alt="" loading="lazy">` : esc(r.emoji)}</div>
-        <div class="body">
-          <div class="row"><span class="nm">${esc(r.name)}</span><span class="cost">⭐ ${r.cost}</span></div>
-          <div class="bar${ready ? ' full' : ''}"><i style="width:${pct(bal, r.cost)}%"></i></div>
-          <div class="left">${ready ? 'Ready to redeem! 🎉' : `${r.cost - bal} more points to go`}</div>
-          <button class="btn ${ready ? 'green' : 'ghost'} block" data-redeem="${r.id}" ${ready ? '' : 'disabled'}>🎁 Redeem</button>
-        </div>
-      </article>`;
-    }).join('') : '<div class="card empty">No prizes yet. Tap “Add prize”.</div>';
-
-    $('#redeemed').innerHTML = state.redeemed.length ? state.redeemed.map(r => `<li>
-        <span class="emo">${esc(r.emoji || '🎁')}</span>
-        <span class="grow"><b>${esc(r.reason)}</b><small>${RR.dayLabel(r.day)} · ${RR.timeOf(r.created_at)}${who(r)}</small></span>
-        <span class="pts-pill prize">${signed(r.points)}</span></li>`).join('')
-      : '<li class="empty" style="display:block">Nothing redeemed yet.</li>';
-  }
-
-  $('#prize-list').addEventListener('click', async e => {
-    const ed = e.target.closest('[data-edit-prize]');
-    if (ed) { prizeSheet(state.rewards.find(r => r.id === ed.dataset.editPrize)); return; }
-    const rd = e.target.closest('[data-redeem]');
-    if (!rd) return;
-    const r = state.rewards.find(x => x.id === rd.dataset.redeem);
-    if (!await confirmSheet(`Redeem ${r.emoji} ${r.name}?`, `This takes ${r.cost} points from ${kidName()}’s balance (${state.balance} → ${state.balance - r.cost}).`, 'Redeem it!')) return;
-    rd.disabled = true;
+  // ---------------------------------------------------------------- prize locker
+  async function redeem(id, btn) {
+    const r = state.rewards.find(x => x.id === id);
+    if (!await confirmSheet(`Redeem ${r.name}?`, `This spends ${fmt(r.cost)} XP from ${kidName()}’s balance (${fmt(state.balance)} → ${fmt(state.balance - r.cost)}). His level and lifetime XP don’t change.`, 'Redeem')) return;
+    btn.disabled = true;
     const { error } = await db.rpc('redeem_reward', { p_reward_id: r.id, p_day: localDay() });
     if (error) { toast(friendly(error), { warn: true }); loadAll(); return; }
-    confetti(['🎁', '🎉', '⭐', r.emoji], 60);
-    toast(`🎉 ${r.name} redeemed! −${r.cost} points`);
+    burst(50);
+    toast(`${r.name} redeemed · −${fmt(r.cost)} XP`);
     loadAll();
-  });
+  }
 
   $('#btn-add-prize').addEventListener('click', () => prizeSheet(null));
 
   function prizeSheet(r) {
     const isNew = !r;
     r = r || { name: '', emoji: '🎁', cost: 30, image_url: null };
-    let imageUrl = r.image_url, emoji = r.emoji;
-    const s = sheet(`<h3>${isNew ? '🎁 New prize' : '✏️ Edit prize'}</h3>
-      <label class="field"><span>Prize name</span><input class="input" name="name" maxlength="60" value="${esc(r.name)}" placeholder="e.g. Regular NeeDoh"></label>
-      <label class="field"><span>Cost in points</span>
+    let imageUrl = r.image_url;
+    const s = sheet(`<h3>${isNew ? 'New prize' : 'Edit prize'}</h3>
+      <label class="field"><span class="label">Prize name</span><input class="input" name="name" maxlength="60" value="${esc(r.name)}" placeholder="e.g. Regular NeeDoh"></label>
+      <label class="field"><span class="label">XP cost</span>
         <div class="stepper"><button type="button" data-step="-5">−</button><input class="input" name="cost" type="number" inputmode="numeric" min="1" value="${r.cost}"><button type="button" data-step="5">+</button></div></label>
-      <div class="field"><span style="display:block;font-weight:600;font-size:14px;margin-bottom:6px">Picture</span>
-        <div class="photo-pick"><div class="thumb" id="thumb"></div>
+      <div class="field"><span class="label">Product photo</span>
+        <div class="photo-pick" style="margin-top:6px"><div class="thumb" id="thumb"></div>
           <div style="display:flex;flex-direction:column;gap:8px">
-            <label class="btn sm">📷 Choose photo<input type="file" accept="image/*" hidden id="photo"></label>
-            <button type="button" class="btn sm ghost" id="rm-photo">Use emoji instead</button>
-          </div></div>
-        <div class="emoji-row">${PRIZE_EMOJIS.map(x => `<button type="button" data-emoji="${x}">${x}</button>`).join('')}</div>
-      </div>
+            <label class="btn sm dark">${icon('camera')}<span>Choose photo</span><input type="file" accept="image/*" hidden id="photo"></label>
+            <button type="button" class="btn sm ghost" id="rm-photo">Remove photo</button>
+          </div></div></div>
       <p class="err"></p>
       <div class="btns">${isNew ? '<button class="btn ghost" data-close>Cancel</button>' : '<button class="btn red" data-del>Delete</button>'}<button class="btn" data-save>Save</button></div>`);
     stepper(s.el);
     const paint = () => {
-      s.el.querySelector('#thumb').innerHTML = imageUrl ? `<img src="${esc(imageUrl)}" alt="">` : esc(emoji);
-      s.el.querySelectorAll('[data-emoji]').forEach(x => x.classList.toggle('on', !imageUrl && x.dataset.emoji === emoji));
+      s.el.querySelector('#thumb').outerHTML = `<div class="thumb shot" id="thumb">${imageUrl ? `<img src="${esc(imageUrl)}" alt="">` : icon('gift')}</div>`;
       s.el.querySelector('#rm-photo').hidden = !imageUrl;
     };
     paint();
-    s.el.querySelectorAll('[data-emoji]').forEach(x => x.addEventListener('click', () => { emoji = x.dataset.emoji; imageUrl = null; paint(); }));
     s.el.querySelector('#rm-photo').addEventListener('click', () => { imageUrl = null; paint(); });
     s.el.querySelector('#photo').addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file) return;
       s.err('');
-      s.el.querySelector('#thumb').textContent = '⏳';
+      s.el.querySelector('#thumb').innerHTML = '<span class="muted" style="font-size:12px">Uploading…</span>';
       try { imageUrl = await uploadImage(file); } catch (err) { s.err('Could not upload that picture: ' + friendly(err)); }
       paint();
     });
@@ -395,17 +428,17 @@
       const name = s.el.querySelector('[name=name]').value.trim();
       const cost = parseInt(s.el.querySelector('[name=cost]').value, 10);
       if (!name) { s.err('Give the prize a name.'); return; }
-      if (!(cost > 0)) { s.err('Cost must be at least 1 point.'); return; }
+      if (!(cost > 0)) { s.err('Cost must be at least 1 XP.'); return; }
       btn.disabled = true;
-      const row = { name, cost, emoji, image_url: imageUrl };
+      const row = { name, cost, emoji: r.emoji || '🎁', image_url: imageUrl };
       const { error } = isNew ? await db.from('rewards').insert(row) : await db.from('rewards').update(row).eq('id', r.id);
       btn.disabled = false;
       if (error) { s.err(friendly(error)); return; }
       if (!isNew && r.image_url && r.image_url !== imageUrl) removeImage(r.image_url);
-      s.close(); toast(isNew ? 'Prize added 🎁' : 'Prize saved ✅'); loadAll();
+      s.close(); toast(isNew ? 'Prize added to the locker' : 'Prize saved'); loadAll();
     });
     s.on('[data-del]', async () => {
-      if (!await confirmSheet(`Delete ${r.name}?`, 'It disappears from the store. Past redemptions stay in the history.', 'Delete', 'red')) return;
+      if (!await confirmSheet(`Delete ${r.name}?`, 'It leaves the Prize Locker. Past redemptions stay in the log.', 'Delete', 'red')) return;
       const { error } = await db.from('rewards').delete().eq('id', r.id);
       if (error) { toast(friendly(error), { warn: true }); return; }
       if (r.image_url) removeImage(r.image_url);
@@ -446,67 +479,40 @@
     if (i > -1) db.storage.from('reward-images').remove([decodeURIComponent(url.slice(i + marker.length))]);
   }
 
-  // ---------------------------------------------------------------- history
-  const who = r => r.created_by ? ' · ' + esc(r.created_by.split('@')[0]) : '';
-
+  // ---------------------------------------------------------------- game log
   function renderHistory() {
-    const st = stats(state.ledger);
-    const max = Math.max(5, ...Object.values(st.perDay));
-    const today = localDay();
-    $('#week').innerHTML = st.days.map(d => `<div class="col${d === today ? ' today' : ''}">
-      <span class="v">${st.perDay[d] || ''}</span>
-      <span class="b" style="height:${Math.round(st.perDay[d] / max * 100)}%"></span>
-      <span class="d">${d === today ? 'Today' : RR.shortDay(d)}</span></div>`).join('');
-    $('#summary').innerHTML = `<div><b>+${st.weekPts}</b><span>earned this week</span></div>
-      <div><b>${st.weekAwards}</b><span>awards this week</span></div>
-      <div><b>${st.weekRedeemed}</b><span>prizes this week</span></div>`;
-
     const rows = state.ledger.filter(r => state.filter === 'all' || r.kind === state.filter || (state.filter === 'earn' && r.kind === 'journal'));
-    if (!rows.length) { $('#history').innerHTML = '<p class="empty">Nothing here yet.</p>'; }
-    else {
-      let html = '', day = null;
-      for (const r of rows) {
-        if (r.day !== day) {
-          if (day !== null) html += '</ul>';
-          day = r.day;
-          const net = rows.filter(x => x.day === day && x.kind !== 'redeem').reduce((a, x) => a + x.points, 0);
-          html += `<div class="day-head"><span>${RR.dayLabel(day)}</span><span>${signed(net)}</span></div><ul class="list">`;
-        }
-        const cls = r.kind === 'redeem' ? 'prize' : r.points > 0 ? 'plus' : 'minus';
-        html += `<li data-row="${r.id}">
-          <span class="emo">${esc(r.emoji || (r.points > 0 ? '⭐' : '⚠️'))}</span>
-          <span class="grow"><b>${esc(r.reason)}</b><small>${RR.timeOf(r.created_at)}${who(r)}${r.kind === 'redeem' ? ' · prize' : ''}</small></span>
-          <span class="pts-pill ${cls}">${signed(r.points)}</span>
-          <button class="icon-btn" data-del-row="${r.id}" aria-label="Remove">🗑️</button></li>`;
-      }
-      $('#history').innerHTML = html + '</ul>';
-    }
-    $('#load-older').hidden = state.olderDone;
+    $('#history').innerHTML = RR.gameLogRows(rows.slice(0, state.logLimit), { who: true, remove: true });
+    $('#load-older').hidden = state.olderDone && rows.length <= state.logLimit;
+    $('#load-older').textContent = 'Show more';
   }
 
   $('#filters').addEventListener('click', e => {
     const c = e.target.closest('[data-f]');
     if (!c) return;
     state.filter = c.dataset.f;
+    state.logLimit = 30;
     $$('#filters .chip').forEach(x => x.classList.toggle('on', x === c));
     renderHistory();
   });
 
-  $('#history').addEventListener('click', async e => {
-    const b = e.target.closest('[data-del-row]');
-    if (!b) return;
-    const r = state.ledger.find(x => x.id === b.dataset.delRow);
+  async function removeRow(id) {
+    const r = state.ledger.find(x => x.id === id);
     const msg = r.kind === 'redeem'
-      ? `This gives back ${-r.points} points (use it if the prize was redeemed by mistake).`
-      : `Only for fixing a mistake: removes this entry and its ${Math.abs(r.points)} points.`;
+      ? `This gives back ${-r.points} XP (use it if the prize was redeemed by mistake).`
+      : `Only for fixing a mistake: removes this entry and its ${Math.abs(r.points)} XP.`;
     if (!await confirmSheet(`Remove “${r.reason}”?`, msg, 'Remove', 'red')) return;
     const { error } = await db.from('ledger').delete().eq('id', r.id);
     if (error) { toast(friendly(error), { warn: true }); return; }
     state.ledger = state.ledger.filter(x => x.id !== r.id);
     toast('Removed'); loadAll();
-  });
+  }
 
   $('#load-older').addEventListener('click', async () => {
+    // Show more of what's loaded first; fetch older games once it runs out.
+    const shown = state.logLimit;
+    state.logLimit += 30;
+    if (state.ledger.length > shown || state.olderDone) { renderHistory(); return; }
     const oldest = state.ledger[state.ledger.length - 1];
     let q = db.from('ledger').select('*').order('created_at', { ascending: false }).limit(100);
     if (oldest) q = q.lt('created_at', oldest.created_at);
@@ -515,222 +521,43 @@
     state.ledger = state.ledger.concat(data);
     if (data.length < 100) state.olderDone = true;
     renderHistory();
-    if (!data.length) toast('That’s everything — no older history.');
+    if (!data.length) toast('That’s everything. No older games.');
   });
 
-  // ---------------------------------------------------------------- setup
-  function kidLink() {
-    return new URL('kid.html#' + state.settings.kid_token, location.href).href;
-  }
-
-  function renderSetup() {
-    $('#behavior-admin').innerHTML = grouped().map(g => `<li class="day-head" style="border:0;padding-bottom:0">${g.title}</li>` +
-      (g.items.map((b, i) => `<li>
-      <span class="emo">${esc(b.emoji)}</span>
-      <span class="grow"><b>${esc(b.name)}</b><small>+${b.points} pts · ${b.once_daily ? 'once a day' : 'any time'}</small></span>
-      <button class="icon-btn" data-move="${b.id}" aria-label="Move up" ${i === 0 ? 'disabled style="opacity:.3"' : ''}>⬆️</button>
-      <button class="icon-btn" data-edit-b="${b.id}" aria-label="Edit">✏️</button></li>`).join('')
-      || '<li class="muted" style="display:block">None yet.</li>')).join('');
-    if (!state.settings) return;
-    const url = state.settings.avatar_url;
-    $('#avatar-thumb').innerHTML = url ? `<img src="${esc(url)}" alt="">` : '🧑‍🚀';
-    $('#avatar-remove').hidden = !url;
-    const jp = $('#journal-points');
-    $('#journal-points-row').hidden = !('journal_points' in state.settings);
-    if (document.activeElement !== jp) jp.value = state.settings.journal_points;
-    const nameInput = $('#kid-name');
-    if (document.activeElement !== nameInput) nameInput.value = state.settings.kid_name;
-    $('#kid-link').textContent = kidLink();
-    $('#open-kid-link').href = kidLink();
-  }
-
-  $('#behavior-admin').addEventListener('click', async e => {
-    const ed = e.target.closest('[data-edit-b]');
-    if (ed) { behaviorSheet(state.behaviors.find(b => b.id === ed.dataset.editB)); return; }
-    const mv = e.target.closest('[data-move]');
-    if (!mv) return;
-    // Move up within its own section, then renumber everything section by section.
-    const groups = grouped().map(g => g.items);
-    const items = groups.find(g => g.some(b => b.id === mv.dataset.move));
-    const i = items.findIndex(b => b.id === mv.dataset.move);
-    [items[i - 1], items[i]] = [items[i], items[i - 1]];
-    const list = groups.flat();
-    state.behaviors = list;
-    renderSetup(); renderTiles();
-    const results = await Promise.all(list.map((b, k) => b.sort === k + 1 ? null : db.from('behaviors').update({ sort: k + 1 }).eq('id', b.id)));
-    if (results.some(r => r && r.error)) toast('Could not save the new order', { warn: true });
-    loadAll();
-  });
-
-  $('#btn-add-behavior').addEventListener('click', () => behaviorSheet(null));
-
-  function behaviorSheet(b) {
-    const isNew = !b;
-    b = b || { name: '', emoji: '⭐', points: 3, once_daily: true, category: 'home' };
-    let emoji = b.emoji, category = catOf(b);
-    const s = sheet(`<h3>${isNew ? '⭐ New behavior' : '✏️ Edit behavior'}</h3>
-      <label class="field"><span>What did he do?</span><input class="input" name="name" maxlength="60" value="${esc(b.name)}" placeholder="e.g. Made his bed"></label>
-      <label class="field"><span>Points</span>
-        <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" name="points" type="number" inputmode="numeric" min="1" value="${b.points}"><button type="button" data-step="1">+</button></div></label>
-      <div class="field"><span style="display:block;font-weight:600;font-size:14px;margin-bottom:6px">Section</span>
-        <div class="chips">${GROUPS.map(g => `<button type="button" class="chip" data-cat="${g.key}">${g.title}</button>`).join('')}</div></div>
-      <label class="toggle"><span><b>Once a day</b><small>Blocks a second award on the same day</small></span>
-        <span class="switch"><input type="checkbox" name="once" ${b.once_daily ? 'checked' : ''}><i></i></span></label>
-      <div class="field"><span style="display:block;font-weight:600;font-size:14px">Icon</span>
-        <div class="emoji-row">${EMOJIS.map(x => `<button type="button" data-emoji="${x}">${x}</button>`).join('')}</div></div>
-      <p class="err"></p>
-      <div class="btns">${isNew ? '<button class="btn ghost" data-close>Cancel</button>' : '<button class="btn red" data-del>Delete</button>'}<button class="btn" data-save>Save</button></div>`);
-    stepper(s.el);
-    const paint = () => s.el.querySelectorAll('[data-emoji]').forEach(x => x.classList.toggle('on', x.dataset.emoji === emoji));
-    if (!EMOJIS.includes(emoji)) s.el.querySelector('.emoji-row').insertAdjacentHTML('afterbegin', `<button type="button" data-emoji="${esc(emoji)}">${esc(emoji)}</button>`);
-    s.el.querySelectorAll('[data-emoji]').forEach(x => x.addEventListener('click', () => { emoji = x.dataset.emoji; paint(); }));
-    paint();
-    const paintCat = () => s.el.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('on', x.dataset.cat === category));
-    s.el.querySelectorAll('[data-cat]').forEach(x => x.addEventListener('click', () => { category = x.dataset.cat; paintCat(); }));
-    paintCat();
-    s.on('[data-save]', async btn => {
-      const name = s.el.querySelector('[name=name]').value.trim();
-      const points = parseInt(s.el.querySelector('[name=points]').value, 10);
-      const once_daily = s.el.querySelector('[name=once]').checked;
-      if (!name) { s.err('Give it a name.'); return; }
-      if (!(points > 0)) { s.err('Points must be at least 1.'); return; }
-      btn.disabled = true;
-      const row = { name, points, once_daily, emoji, category };
-      if (isNew) row.sort = Math.max(0, ...state.behaviors.map(x => x.sort)) + 1;
-      const { error } = isNew ? await db.from('behaviors').insert(row) : await db.from('behaviors').update(row).eq('id', b.id);
-      btn.disabled = false;
-      if (error) { s.err(friendly(error)); return; }
-      s.close(); toast(isNew ? 'Behavior added ⭐' : 'Saved ✅'); loadAll();
-    });
-    s.on('[data-del]', async () => {
-      if (!await confirmSheet(`Delete “${b.name}”?`, 'Points he already earned for it stay in his balance and history.', 'Delete', 'red')) return;
-      const { error } = await db.from('behaviors').delete().eq('id', b.id);
-      if (error) { toast(friendly(error), { warn: true }); return; }
-      s.close(); toast('Behavior deleted'); loadAll();
-    });
-  }
-
-  // Profile photo: upload, save on the settings row, then tidy up the old file.
-  $('#avatar-file').addEventListener('change', async e => {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    $('#avatar-thumb').textContent = '⏳';
-    try {
-      const url = await uploadImage(file);
-      await saveAvatar(url);
-    } catch (err) {
-      toast('Could not upload that photo: ' + friendly(err), { warn: true });
-      renderSetup();
-    }
-  });
-
-  $('#avatar-remove').addEventListener('click', async () => {
-    if (!await confirmSheet('Remove the profile photo?', 'The rocket icon shows instead.', 'Remove', 'red')) return;
-    saveAvatar(null);
-  });
-
-  async function saveAvatar(url) {
-    const old = state.settings.avatar_url;
-    const { error } = await db.from('settings').update({ avatar_url: url }).eq('id', 1);
-    if (error) {
-      if (url) removeImage(url);
-      toast(/avatar_url/.test(error.message) ? 'Run supabase/add-avatar.sql in Supabase first (see README).' : friendly(error), { warn: true });
-      renderSetup();
-      return;
-    }
-    if (old && old !== url) removeImage(old);
-    toast(url ? 'Profile photo saved 📸' : 'Photo removed');
-    loadAll();
-  }
-
-  stepper($('#journal-points-row'), 0);
-  $('#save-journal-points').addEventListener('click', async () => {
-    const n = parseInt($('#journal-points').value, 10);
-    if (!(n >= 0 && n <= 50)) { toast('Pick 0 to 50 points.'); return; }
-    const { error } = await db.from('settings').update({ journal_points: n }).eq('id', 1);
-    if (error) { toast(friendly(error), { warn: true }); return; }
-    toast(n ? `He’ll earn +${n} for sharing his day 📝` : 'Journal points turned off'); loadAll();
-  });
-
-  $('#save-kid-name').addEventListener('click', async () => {
-    const name = $('#kid-name').value.trim();
-    if (!name) return;
-    const { error } = await db.from('settings').update({ kid_name: name }).eq('id', 1);
-    if (error) { toast(friendly(error), { warn: true }); return; }
-    toast('Name saved ✅'); loadAll();
-  });
-
-  $('#copy-kid-link').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(kidLink()); toast('Link copied 📋'); }
-    catch { toast('Press and hold the link to copy it.'); }
-  });
-
-  $('#new-kid-link').addEventListener('click', async () => {
-    if (!await confirmSheet('Make a new link?', 'The old kid link stops working. You’ll need to open the new link on his device.', 'Make new link')) return;
-    const { error } = await db.from('settings').update({ kid_token: crypto.randomUUID() }).eq('id', 1);
-    if (error) { toast(friendly(error), { warn: true }); return; }
-    toast('New link ready 🔄'); loadAll();
-  });
-
-  // ---------------------------------------------------------------- journal
-  const store = {
-    get(k) { try { return localStorage.getItem('rr.' + k); } catch { return null; } },
-    set(k, v) { try { localStorage.setItem('rr.' + k, v); } catch { /* private mode */ } }
-  };
+  // ---------------------------------------------------------------- postgame interviews
   const newestJournal = () => state.journal.reduce((m, j) => j.updated_at > m ? j.updated_at : m, '');
   const journalUnread = () => !!state.journal.length && newestJournal() > (store.get('journalSeen') || '');
-  const QUICK_REPLIES = ['So proud of you! ⭐', 'Love you, buddy! ❤️', 'Thanks for telling us 🤗', 'Let’s talk about it tonight 💬', 'That made us smile! 😄'];
+  const markJournalSeen = () => { if (state.journal.length) store.set('journalSeen', newestJournal()); };
 
   function renderJournal() {
-    if (state.tab === 'journal' && state.journal.length) store.set('journalSeen', newestJournal());
-    const unread = journalUnread();
-    $('#journal-dot').hidden = !unread;
-    const latest = state.journal[0];
-    $('#journal-banner').hidden = !unread;
-    if (unread) $('#journal-banner').innerHTML = `<span class="emo">${RR.mood(latest.mood).emoji}</span>
-      <span class="grow"><b>${esc(kidName())} wrote about his day</b><small>Tap to read it 📝</small></span><span>›</span>`;
-
-    $('#journal-title').textContent = `💬 ${kidName()}’s journal`;
+    if (state.tab === 'stats') markJournalSeen();
+    $('#stats-dot').hidden = !journalUnread();
     if (state.journalMissing) {
-      $('#journal-week').innerHTML = '';
-      $('#journal-list').innerHTML = `<div class="card"><b>One quick step:</b> run <code>supabase/add-journal.sql</code> in Supabase’s SQL Editor to turn on the journal (see the README).</div>`;
+      $('#s-moods').innerHTML = '<p class="muted" style="margin:0">Run <code>supabase/add-journal.sql</code> in Supabase to turn on postgame interviews.</p>';
+      $('#journal-list').innerHTML = '';
       return;
     }
-
-    // Mood strip for the last 7 days
-    const byDay = Object.fromEntries(state.journal.map(j => [j.day, j]));
-    const today = localDay();
-    $('#journal-week').innerHTML = RR.last7().map(d => `<div class="mood-day${d === today ? ' today' : ''}">
-      <span class="m">${byDay[d] ? RR.mood(byDay[d].mood).emoji : '·'}</span><span class="d">${d === today ? 'Today' : RR.shortDay(d)}</span></div>`).join('');
-
-    $('#journal-list').innerHTML = state.journal.length ? state.journal.map(j => {
+    $('#s-moods').innerHTML = '<span class="label" style="margin-bottom:8px">Mood · last 7 days</span>' + RR.moodWeek(state.journal);
+    $('#journal-list').innerHTML = state.journal.length ? state.journal.slice(0, 14).map(j => {
       const m = RR.mood(j.mood);
-      return `<article class="card j-entry mood-${esc(j.mood)}">
-        <div class="j-head"><span class="j-mood">${m.emoji}</span>
-          <span class="grow"><b>Feeling ${esc(m.label.toLowerCase())}</b><small>${RR.dayLabel(j.day)} · ${RR.timeOf(j.updated_at)}</small></span></div>
-        ${j.prompt ? `<p class="j-prompt">💭 ${esc(j.prompt)}</p>` : ''}
-        <p class="j-body">${j.body ? esc(j.body) : '<span class="muted">(Just a feeling today, no words.)</span>'}</p>
-        ${j.parent_reply
-          ? `<div class="j-reply"><small>💌 ${esc((j.replied_by || 'You').split('@')[0])} wrote back</small><p>${esc(j.parent_reply)}</p>
-               <button class="btn sm ghost" data-reply="${j.id}">✏️ Edit reply</button></div>`
-          : `<button class="btn sm pink" data-reply="${j.id}">💌 Write back</button>`}
+      return `<article class="panel entry">
+        <div class="pg-head"><span class="m">${m.emoji}</span><div><b>Feeling ${esc(m.label.toLowerCase())}</b><small>${RR.dayLabel(j.day)} · ${RR.timeOf(j.updated_at)}</small></div></div>
+        ${j.prompt ? `<p class="pg-prompt">Q: ${esc(j.prompt)}</p>` : ''}
+        ${j.body ? `<div class="pg-text">${esc(j.body)}</div>` : '<p class="muted" style="margin:10px 0">No answer written, just a mood.</p>'}
+        ${j.parent_reply ? `<div class="pg-reply"><span class="label">${esc((j.replied_by || 'You').split('@')[0])} replied</span><p>${esc(j.parent_reply)}</p></div>` : ''}
+        <button class="btn sm ${j.parent_reply ? 'dark' : ''}" data-reply="${j.id}">${icon(j.parent_reply ? 'edit' : 'message')}${j.parent_reply ? 'Edit reply' : 'Reply'}</button>
       </article>`;
-    }).join('') : `<div class="card empty">Nothing yet. When ${esc(kidName())} writes about his day on his dashboard, it shows up here.</div>`;
+    }).join('') : `<div class="panel empty">When ${esc(kidName())} answers his postgame question, it shows up here.</div>`;
   }
 
-  $('#journal-banner').addEventListener('click', () => goTab('journal'));
-
-  $('#journal-list').addEventListener('click', e => {
-    const b = e.target.closest('[data-reply]');
-    if (!b) return;
-    const j = state.journal.find(x => x.id === b.dataset.reply);
-    const s = sheet(`<h3>💌 Write back to ${esc(kidName())}</h3>
-      <p class="muted" style="margin-top:0">He’ll see this on his dashboard with a little celebration.</p>
-      <label class="field"><textarea class="input" name="reply" rows="3" maxlength="500" placeholder="Your message…">${esc(j.parent_reply || '')}</textarea></label>
+  function replySheet(id) {
+    const j = state.journal.find(x => x.id === id);
+    const s = sheet(`<h3>Reply to ${esc(kidName())}</h3>
+      <p class="muted" style="margin-top:0">He’ll see it on his dashboard.</p>
+      <label class="field"><textarea class="input" name="reply" rows="3" maxlength="500" placeholder="Your message">${esc(j.parent_reply || '')}</textarea></label>
       <div class="chips">${QUICK_REPLIES.map(r => `<button type="button" class="chip" data-quick="${esc(r)}">${esc(r)}</button>`).join('')}</div>
       <p class="err"></p>
-      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn pink" data-save>Send 💌</button></div>`);
+      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-save>Send</button></div>`);
     const box = s.el.querySelector('[name=reply]');
     s.el.querySelectorAll('[data-quick]').forEach(c => c.addEventListener('click', () => {
       box.value = box.value.trim() ? box.value.trim() + ' ' + c.dataset.quick : c.dataset.quick;
@@ -741,19 +568,200 @@
       const { error } = await db.from('journal').update({ parent_reply: reply || null, replied_by: reply ? state.user.email : null }).eq('id', j.id);
       btn.disabled = false;
       if (error) { s.err(friendly(error)); return; }
-      s.close(); toast(reply ? 'Sent 💌' : 'Reply removed'); loadAll();
+      s.close(); toast(reply ? 'Reply sent' : 'Reply removed'); loadAll();
     });
+  }
+
+  // ---------------------------------------------------------------- front office
+  function kidLink() {
+    return new URL('kid.html#' + state.settings.kid_token, location.href).href;
+  }
+
+  function renderManage() {
+    const m = model();
+    $('#behavior-admin').innerHTML = m.lineup.map((b, i) => {
+      const first = i === 0 || m.lineup[i - 1].cat !== b.cat;
+      return (first ? `<li class="day-head" style="border:0;padding-bottom:0">${RR.CATEGORIES[b.cat]}</li>` : '') + `<li>
+        <span class="lu-no" style="width:30px;height:30px;font-size:15px">${b.order}</span>
+        <span class="grow"><b>${esc(b.name)}</b><small>+${b.points} XP · ${b.once_daily ? 'Once a day' : 'Any time'}</small></span>
+        <button class="icon-btn" data-move="${b.id}" aria-label="Move up" ${first ? 'disabled' : ''}>${icon('up', 'sm')}</button>
+        <button class="icon-btn" data-edit-b="${b.id}" aria-label="Edit">${icon('edit', 'sm')}</button></li>`;
+    }).join('') || '<li class="empty" style="display:block">The lineup is empty.</li>';
+    if (!state.settings) return;
+    const st = state.settings;
+    $('#avatar-thumb').innerHTML = st.avatar_url ? `<img src="${esc(st.avatar_url)}" alt="">` : icon('camera');
+    $('#avatar-remove').hidden = !st.avatar_url;
+    const keep = (sel, v) => { const el = $(sel); if (document.activeElement !== el) el.value = v == null ? '' : v; };
+    keep('#kid-name', st.kid_name);
+    keep('#kid-jersey', st.jersey_number);
+    keep('#kid-position', st.position);
+    $('#kid-jersey').disabled = $('#kid-position').disabled = !('jersey_number' in st);
+    $('#journal-points-row').hidden = !('journal_points' in st);
+    keep('#journal-points', st.journal_points);
+    $('#kid-link').textContent = kidLink();
+    $('#open-kid-link').href = kidLink();
+    $('#upgrade-note').innerHTML = state.clubMissing
+      ? `<div class="alert amber" style="margin-top:0">${icon('bolt')}<span class="grow"><b>One-time database upgrade</b>
+          <small>Run <code>supabase/add-clubhouse.sql</code> in Supabase’s SQL Editor to turn on jersey numbers, lifetime XP levels and check-in approvals.</small></span></div>` : '';
+  }
+
+  $('#save-card').addEventListener('click', async () => {
+    const name = $('#kid-name').value.trim();
+    if (!name) { toast('Add a player name.'); return; }
+    const row = { kid_name: name };
+    if ('jersey_number' in state.settings) {
+      const jersey = $('#kid-jersey').value.trim();
+      if (jersey && !/^[0-9]{1,2}$/.test(jersey)) { toast('Jersey number: 0 to 99.'); return; }
+      row.jersey_number = jersey || null;
+      row.position = $('#kid-position').value.trim().toUpperCase() || null;
+    }
+    const { error } = await db.from('settings').update(row).eq('id', 1);
+    if (error) { toast(friendly(error), { warn: true }); return; }
+    toast('Player card saved'); loadAll();
   });
 
-  // ---------------------------------------------------------------- tabs
+  async function moveUp(id) {
+    // Move up within its own section, then renumber everything section by section.
+    const m = model();
+    const list = m.lineup.slice();
+    const i = list.findIndex(b => b.id === id);
+    if (i < 1 || list[i - 1].cat !== list[i].cat) return;
+    [list[i - 1], list[i]] = [list[i], list[i - 1]];
+    state.behaviors = list.map(({ order, cat, n, status, ...b }) => b);
+    render();
+    const results = await Promise.all(list.map((b, k) => b.sort === k + 1 ? null : db.from('behaviors').update({ sort: k + 1 }).eq('id', b.id)));
+    if (results.some(r => r && r.error)) toast('Could not save the new order', { warn: true });
+    loadAll();
+  }
+
+  $('#btn-add-behavior').addEventListener('click', () => behaviorSheet(null));
+
+  function behaviorSheet(b) {
+    const isNew = !b;
+    b = b || { name: '', emoji: '⭐', points: 3, once_daily: true, category: 'home' };
+    let category = RR.catOf(b);
+    const s = sheet(`<h3>${isNew ? 'Add to lineup' : 'Edit lineup item'}</h3>
+      <label class="field"><span class="label">Activity</span><input class="input" name="name" maxlength="60" value="${esc(b.name)}" placeholder="e.g. Morning routine"></label>
+      <label class="field"><span class="label">XP value</span>
+        <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" name="points" type="number" inputmode="numeric" min="1" value="${b.points}"><button type="button" data-step="1">+</button></div></label>
+      <div class="field"><span class="label" style="margin-bottom:6px">Category</span>
+        <div class="chips">${Object.entries(RR.CATEGORIES).map(([k, v]) => `<button type="button" class="chip" data-cat="${k}">${v}</button>`).join('')}</div></div>
+      <label class="toggle"><span><b>Once a day</b><small>Blocks a second award on the same day</small></span>
+        <span class="switch"><input type="checkbox" name="once" ${b.once_daily ? 'checked' : ''}><i></i></span></label>
+      <p class="err"></p>
+      <div class="btns">${isNew ? '<button class="btn ghost" data-close>Cancel</button>' : '<button class="btn red" data-del>Delete</button>'}<button class="btn" data-save>Save</button></div>`);
+    stepper(s.el);
+    const paintCat = () => s.el.querySelectorAll('[data-cat]').forEach(x => x.classList.toggle('on', x.dataset.cat === category));
+    s.el.querySelectorAll('[data-cat]').forEach(x => x.addEventListener('click', () => { category = x.dataset.cat; paintCat(); }));
+    paintCat();
+    s.on('[data-save]', async btn => {
+      const name = s.el.querySelector('[name=name]').value.trim();
+      const points = parseInt(s.el.querySelector('[name=points]').value, 10);
+      const once_daily = s.el.querySelector('[name=once]').checked;
+      if (!name) { s.err('Give it a name.'); return; }
+      if (!(points > 0)) { s.err('XP must be at least 1.'); return; }
+      btn.disabled = true;
+      const row = { name, points, once_daily, category, emoji: b.emoji || '⭐' };
+      if (isNew) row.sort = Math.max(0, ...state.behaviors.map(x => x.sort)) + 1;
+      const { error } = isNew ? await db.from('behaviors').insert(row) : await db.from('behaviors').update(row).eq('id', b.id);
+      btn.disabled = false;
+      if (error) { s.err(friendly(error)); return; }
+      s.close(); toast(isNew ? 'Added to the lineup' : 'Saved'); loadAll();
+    });
+    s.on('[data-del]', async () => {
+      if (!await confirmSheet(`Delete “${b.name}”?`, 'XP he already earned for it stays in his balance and history.', 'Delete', 'red')) return;
+      const { error } = await db.from('behaviors').delete().eq('id', b.id);
+      if (error) { toast(friendly(error), { warn: true }); return; }
+      s.close(); toast('Removed from the lineup'); loadAll();
+    });
+  }
+
+  // Player photo: upload, save on the settings row, then tidy up the old file.
+  $('#avatar-file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    $('#avatar-thumb').innerHTML = '<span class="muted" style="font-size:12px">Uploading…</span>';
+    try {
+      const url = await uploadImage(file);
+      await saveAvatar(url);
+    } catch (err) {
+      toast('Could not upload that photo: ' + friendly(err), { warn: true });
+      renderManage();
+    }
+  });
+
+  $('#avatar-remove').addEventListener('click', async () => {
+    if (!await confirmSheet('Remove the player photo?', 'His initials show instead.', 'Remove', 'red')) return;
+    saveAvatar(null);
+  });
+
+  async function saveAvatar(url) {
+    const old = state.settings.avatar_url;
+    const { error } = await db.from('settings').update({ avatar_url: url }).eq('id', 1);
+    if (error) {
+      if (url) removeImage(url);
+      toast(/avatar_url/.test(error.message) ? 'Run supabase/add-avatar.sql in Supabase first (see README).' : friendly(error), { warn: true });
+      renderManage();
+      return;
+    }
+    if (old && old !== url) removeImage(old);
+    toast(url ? 'Player photo saved' : 'Photo removed');
+    loadAll();
+  }
+
+  stepper($('#journal-points-row'), 0);
+  $('#save-journal-points').addEventListener('click', async () => {
+    const n = parseInt($('#journal-points').value, 10);
+    if (!(n >= 0 && n <= 50)) { toast('Pick 0 to 50 XP.'); return; }
+    const { error } = await db.from('settings').update({ journal_points: n }).eq('id', 1);
+    if (error) { toast(friendly(error), { warn: true }); return; }
+    toast(n ? `+${n} XP for each postgame interview` : 'Postgame XP turned off'); loadAll();
+  });
+
+  $('#copy-kid-link').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(kidLink()); toast('Link copied'); }
+    catch { toast('Press and hold the link to copy it.'); }
+  });
+
+  $('#new-kid-link').addEventListener('click', async () => {
+    if (!await confirmSheet('Make a new link?', 'The old player dashboard link stops working. You’ll need to open the new link on his device.', 'Make new link')) return;
+    const { error } = await db.from('settings').update({ kid_token: crypto.randomUUID() }).eq('id', 1);
+    if (error) { toast(friendly(error), { warn: true }); return; }
+    toast('New link ready'); loadAll();
+  });
+
+  // ---------------------------------------------------------------- navigation + taps
   function goTab(name) {
+    if (name !== 'manage') state.prevTab = name;
     state.tab = name;
     $$('.nav [data-go]').forEach(b => b.classList.toggle('on', b.dataset.go === name));
     $$('[data-tab]').forEach(sec => { sec.hidden = sec.dataset.tab !== name; });
     window.scrollTo({ top: 0 });
-    if (name === 'journal') renderJournal();
+    if (name === 'stats') { renderJournal(); renderClubhouse(model()); }
   }
-  $$('.nav [data-go]').forEach(btn => btn.addEventListener('click', () => goTab(btn.dataset.go)));
+
+  $('#btn-manage').addEventListener('click', () => goTab('manage'));
+
+  // One listener for every tappable thing inside the app.
+  $('#screen-app').addEventListener('click', e => {
+    const t = e.target.closest('[data-go],[data-manage],[data-award],[data-approve],[data-decline],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-edit-b],[data-move]');
+    if (!t) return;
+    const d = t.dataset;
+    if (t.id === 'manage-back') { goTab(state.prevTab); return; }
+    if (d.go) goTab(d.go);
+    else if (d.manage) { goTab('manage'); $('#manage-lineup').scrollIntoView(); }
+    else if (d.award) award(d.award, t);
+    else if (d.approve) award(d.approve, null);
+    else if (d.decline) decline(d.decline);
+    else if (d.redeem) redeem(d.redeem, t);
+    else if (d.editPrize) prizeSheet(state.rewards.find(r => r.id === d.editPrize));
+    else if (d.delRow) removeRow(d.delRow);
+    else if (d.reply) replySheet(d.reply);
+    else if ('openJournal' in d) { goTab('stats'); $('#postgame').scrollIntoView(); }
+    else if (d.editB) behaviorSheet(state.behaviors.find(b => b.id === d.editB));
+    else if (d.move) moveUp(d.move);
+  });
 
   // ---------------------------------------------------------------- sheets
   function sheet(html) {
@@ -775,7 +783,7 @@
     return api;
   }
 
-  function confirmSheet(title, body, yes, color = 'green') {
+  function confirmSheet(title, body, yes, color = '') {
     return new Promise(resolve => {
       let answered = false;
       const s = sheet(`<h3>${esc(title)}</h3><p class="muted" style="margin-top:0">${esc(body)}</p>

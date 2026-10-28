@@ -1,4 +1,4 @@
-# Netlify settings for Reward Rocket.
+# Netlify settings for The Clubhouse.
 #
 # There is no build step: the repository is published exactly as it is.
 # In Netlify leave Base directory, Build command and Publish directory empty.

@@ -1,36 +1,45 @@
-# Reward Rocket 🚀
+# The Clubhouse
 
-A points-and-prizes app for Jaylen. Mom and Dad each sign in from their own phones and share one account. Jaylen gets his own view-only dashboard.
+**Earn Your Wins.**
 
-- **Parent app** (`index.html`): award points in one tap, add bonus points (with a reason), redeem prizes, see history and weekly progress, and edit behaviors and prizes.
-- **Kid dashboard** (`kid.html#…`): points, a rocket progress track toward his next prize, his week, prizes, ways to earn points, and celebrations when he earns points or unlocks a prize. It is view-only.
+A player-development app for Jaylen. Mom and Dad each sign in on their own phones and share one account. Jaylen gets his own player dashboard. It's built to feel like a baseball video game: he earns XP, levels up and unlocks prizes.
 
-**Points only go up.** Parents add points; the only thing that spends them is redeeming a prize. (A mistaken award can still be undone.)
+**Parent app** (`index.html`)
+- **Clubhouse:** his player card, check-ins waiting for approval, today's lineup, his stats, the next unlock and recent highlights.
+- **Lineup:** tap any item to award XP (two taps from opening the app). Bonus XP lives here too.
+- **Prize Locker:** add prizes with product photos, set XP costs and redeem.
+- **Stats:** weekly box score, season stats, the Trophy Case, Road to the Hall, his Postgame Interviews (read and reply) and the full game log.
+- **Front Office** (gear icon): player card (photo, name, jersey #, position), lineup and XP values, postgame XP, his dashboard link and your account.
 
-**Two sections of behaviors:**
-- **🏠 Home & School:** getting ready, homework, chores, kindness and so on.
-- **🏅 Sports & Team:** his *approach* to the game, not his stats: sportsmanship, extra practice, being a great teammate, hustle, listening to the coach, bouncing back from mistakes, being ready on time, and respecting umps, refs and opponents.
+**Player dashboard** (`kid.html#…`)
+- The same four tabs, built for him: player card, today's lineup, stats, Prize Locker, Trophy Case.
+- **I did it:** he taps this on a lineup item. It shows as **Pending Approval** until a parent approves it (which awards the XP) or declines it.
+- **Postgame Interview:** a new question each day. He picks how he's feeling and writes an answer. Answering earns XP (+2 by default), once a day.
+- **Celebrations** for XP earned, level-ups, unlocked prizes and your replies.
+- **Limits:** he can't award XP, redeem prizes or change anything else.
 
-**📝 My Day journal:**
-- **Jaylen's side:** every day his dashboard asks a new question ("What made you laugh today?"). He picks how he's feeling (🤩 😊 😐 😢 😤 😟), writes an answer and sends it. He earns **+2 points** the first time each day he sends an answer with writing in it; you can change or turn off the amount in **⚙️ Setup**.
-- **Your side:** his entries show up in the **💬 Journal** tab, with a pink dot and a banner on the Award screen when there's something new. You can write back, and he gets a "Mom & Dad wrote back!" celebration.
-- **Limits:** his dashboard can only write his own journal entry for today. It can't change points, prizes or anything else.
+**XP and levels**
+- **XP balance** is what he spends in the Prize Locker. XP only goes up, except when a prize is redeemed. A mistaken award can still be undone.
+- **Levels** come from **lifetime XP**, so redeeming a prize never lowers his level: Rookie (0), Prospect (100), Starter (300), All-Star (600), MVP (1,200), Hall of Famer (2,500).
+- **Trophy Case:** First Pitch, Hot Streak (3 days), Iron Man (7 days), Double Digits (10 tasks), Grinder (50 tasks), Team Player (10 on-field awards), Closer (first prize) and Postgame Pro (7 interviews).
+- **Lineup categories:** **Home & School** and **On the Field**. On the Field is about his approach to the game, not his stats.
 
-**How it's built:** plain HTML, CSS and JavaScript with no build step. **Supabase** (free tier) provides the database, logins, prize-photo storage and live sync. **Netlify** (free tier) hosts the site.
+**How it's built:** plain HTML, CSS and JavaScript with no build step. **Supabase** (free tier) provides the database, logins, photo storage and live sync. **Netlify** (free tier) hosts the site.
 
 ---
 
-## Already set up before the Sports section was added?
+## Upgrading an existing install
 
-Run `supabase/add-sports.sql` once in Supabase → **SQL Editor → New query → Run**. It adds the sports section and 7 starter sports behaviors, and moves "Good sportsmanship" into it. Nothing you've earned or set up is changed. (New installs don't need this; `setup.sql` already includes it.)
+Already using the app? Run each file below that you haven't run yet in Supabase → **SQL Editor → New query → Run**. Each one only *adds* things; no XP, prizes or entries are changed, and each is safe to run twice.
 
-## Already set up before the journal was added?
+| File | Adds |
+|---|---|
+| `supabase/add-sports.sql` | the On the Field category and its starter items |
+| `supabase/add-avatar.sql` | the player photo |
+| `supabase/add-journal.sql` | the Postgame Interview |
+| `supabase/add-clubhouse.sql` | **The Clubhouse redesign:** jersey # and position, check-in approvals, and lifetime-XP levels and stats |
 
-Run `supabase/add-journal.sql` once in Supabase → **SQL Editor → New query → Run**. Nothing you've earned or set up is changed.
-
-## Already set up before profile photos were added?
-
-Run `supabase/add-avatar.sql` once in Supabase → **SQL Editor → New query → Run**. Then add his photo under **⚙️ Setup → Kid's dashboard → 📷 Profile photo**.
+New installs only need `setup.sql`.
 
 ---
 
@@ -39,7 +48,7 @@ Run `supabase/add-avatar.sql` once in Supabase → **SQL Editor → New query �
 ### Step 1: Create the database (Supabase)
 
 1. Go to **https://supabase.com** and sign up (free).
-2. Click **New project**. Name it `reward-rocket`, pick any database password (you won't need it again) and the region closest to you, then click **Create**. Wait about a minute for it to finish.
+2. Click **New project**. Name it `clubhouse`, pick any database password (you won't need it again) and the region closest to you, then click **Create**. Wait about a minute for it to finish.
 3. Open **SQL Editor** in the left sidebar and click **New query**.
 4. Open `supabase/setup.sql` from this folder and copy **all** of it into the editor.
 5. **Before running**, find these two lines near the top and replace the emails with the ones you and your wife will sign in with:
@@ -92,9 +101,7 @@ In Supabase, go to **Authentication → URL Configuration** and set **Site URL**
    - **iPhone (Safari):** tap Share **⬆︎** → **Add to Home Screen**.
    - **Android (Chrome):** tap **⋮** → **Add to Home screen** (or **Install app**).
 3. Send the URL to your wife. She signs in with her own email and password.
-4. **Jaylen's dashboard:** in the app, go to **⚙️ Setup → Kid's dashboard**. Tap **Open** on his tablet or phone, or copy the link and send it to his device, then add it to his home screen the same way. The device remembers his link after that.
-
-That's it. 🎉
+4. **Jaylen's player dashboard:** in the app, tap the gear (**Front Office**) → **Player Dashboard Link**. Tap **Open** on his device, or copy the link and send it there, then add it to his home screen the same way. His device remembers the link after that.
 
 ---
 
@@ -102,22 +109,21 @@ That's it. 🎉
 
 | You want to… | Do this |
 |---|---|
-| Award points | **🚀 Award** tab → tap the behavior. Mis-tapped? Tap **Undo** in the pop-up. |
-| Give bonus points | **🌟 Bonus points** → amount → reason |
-| Redeem a prize | **🎁 Prizes** → **Redeem** (only lights up when he has enough points) |
-| Fix a mistake from earlier | **📜 History** → 🗑️ next to the entry (this gives back or removes its points) |
-| Add/edit/remove behaviors | **⚙️ Setup** → ✏️ or **＋ Add behavior**, and pick **🏠 Home & School** or **🏅 Sports & Team** (⬆️ moves one up within its section) |
-| Read Jaylen's journal / write back | **💬 Journal** → **💌 Write back** |
-| Change journal points | **⚙️ Setup → Kid's dashboard → 📝 Points for sharing his day** |
-| Add Jaylen's profile photo | **⚙️ Setup → Kid's dashboard → 📷 Profile photo** |
-| Add a prize with a photo | **🎁 Prizes** → **＋ Add prize** → **📷 Choose photo** (or edit a prize with ✏️) |
+| Award XP | **Lineup** → tap the item. Mis-tapped? Tap **Undo** in the pop-up. |
+| Approve his check-ins | **Clubhouse** → **Pending Approval** → **Approve** (or ✕ to decline). Tapping the item in the Lineup also approves it. |
+| Give bonus XP | **Lineup** → **Bonus XP** → amount → reason |
+| Redeem a prize | **Prize Locker** → **Redeem** (only lit up once he has enough XP) |
+| Fix a mistake | **Stats → Game Log** → trash icon next to the entry |
+| Edit the lineup / XP values | gear → **Lineup & XP Values** (or **Lineup → Edit lineup**) |
+| Add a prize with a photo | **Prize Locker → Add prize → Choose photo** (edit one with the pencil) |
+| Read and reply to his answers | **Stats → Postgame Interviews → Reply** (a new one also shows on the Clubhouse) |
+| Jersey #, position, photo | gear → **Player Card** |
 
 **Duplicate protection:**
-- Behaviors marked **Once a day** (for example homework, chores, bedtime and extra practice) can only be earned once per day. The tile turns green with ✓ Done today. The database enforces this, so it holds even if both of you tap at the same moment.
-- "Any time" behaviors (kindness, respect, hustle, being a great teammate, and so on) can be earned several times a day. If one is tapped again within 90 seconds, the app asks "Award again?" first.
-- You can switch any behavior between **Once a day** and **Any time** in Setup.
+- **Once a day items** can only be earned once per day, and show **Completed** after that. The database enforces this, so it holds even if both of you tap at the same moment.
+- **Any time items** can be earned several times a day. A second tap within 90 seconds asks "Award again?" first.
 
-**Sync:** changes show up on the other parent's phone within a second or two. The **● Live** dot in the corner shows the connection is up. Jaylen's dashboard refreshes every 15 seconds.
+**Sync:** changes show up on the other parent's phone within a second or two (the **● Live** dot shows the connection). His dashboard refreshes every 15 seconds.
 
 **Weeks** run Sunday to Saturday.
 
@@ -127,8 +133,9 @@ That's it. 🎉
 
 - All data is stored in your Supabase database, so nothing is lost when you refresh or switch phones.
 - The database only lets in the emails listed in the `parents` table. Everyone else sees nothing, even with a valid login.
-- Jaylen's link contains a long random secret. It can read his summary and write **only his own journal entry for today**. It can't change points, prizes or anything else. Anyone holding his link could read his recent journal entries, so treat it like a key. If the link ever gets shared by accident, tap **🔄 New link** in Setup and the old link stops working.
-- Prize photos are stored with hard-to-guess file names. Anyone holding a photo's exact link could view that photo.
+- Jaylen's link contains a long random secret. It can read his dashboard, check in a lineup item for **your approval**, and save **his own postgame answer for today**. It can't award XP, redeem prizes or change anything else.
+- Anyone holding his link could read his recent answers, so treat it like a key. If it ever gets shared, tap **New link** in the Front Office and the old link stops working.
+- Photos are stored with hard-to-guess file names. Anyone holding a photo's exact link could view that photo.
 
 ## Changing who can sign in
 
@@ -149,16 +156,17 @@ Both free tiers are far more than one family needs. One thing to know: **Supabas
 ```
 rewardrocket/
   index.html            parent app
-  kid.html              Jaylen's dashboard
-  css/app.css, kid.css  styles
+  kid.html              Jaylen's player dashboard
+  css/clubhouse.css     the design system (colors, type, player card, lineup, locker…)
   js/config.js          ← your Supabase URL + publishable key go here
-  js/common.js          shared helpers
-  js/parent.js          parent app logic
-  js/kid.js             kid dashboard logic
+  js/common.js          shared logic + components (levels, stats, badges, player card…)
+  js/parent.js          parent app
+  js/kid.js             player dashboard
   supabase/setup.sql    database setup (run once in the SQL Editor)
   supabase/add-sports.sql  one-time upgrade for databases made before the sports section
   supabase/add-avatar.sql  one-time upgrade for databases made before profile photos
   supabase/add-journal.sql one-time upgrade for databases made before the journal
+  supabase/add-clubhouse.sql one-time upgrade for The Clubhouse redesign
   vendor/               the Supabase JavaScript library (bundled, so no outside CDN is needed)
   icons/, manifest.webmanifest   home-screen icon
   netlify.toml          hosting settings
