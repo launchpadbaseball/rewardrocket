@@ -20,7 +20,8 @@
     ledger: [],          // newest first
     redeemed: [],
     journal: [],         // newest day first
-    requests: [],        // "I did it" check-ins from his dashboard
+    self: [],            // his own ratings of each standard (last 2 weeks)
+    gameMissing: false,  // true until supabase/add-gameplan.sql has been run
     stats: null,         // career stats (lifetime XP etc.)
     activity: [],        // what Jaylen did (check-ins, interviews), newest first
     activityMissing: false,
@@ -39,15 +40,15 @@
   $$('.js-mark').forEach(el => { el.outerHTML = RR.brandMark(el.closest('.topbar') ? 'brand-mark' : 'hero-mark'); });
   const label = (sel, ic, text) => { const el = $(sel); if (el) el.innerHTML = icon(ic) + `<span>${text}</span>`; };
   label('#nav-clubhouse', 'clubhouse', 'Clubhouse');
-  label('#nav-lineup', 'lineup', 'Lineup');
+  label('#nav-lineup', 'lineup', 'Game Plan');
   label('#nav-locker', 'locker', 'Prize Locker');
   label('#nav-stats', 'stats', 'Stats');
   $('#nav-stats').insertAdjacentHTML('beforeend', '<i class="dot" id="stats-dot" hidden></i>');
   $('#btn-manage').innerHTML = icon('gear');
   label('#btn-bonus', 'plus', 'Bonus XP');
-  label('[data-manage="lineup"]', 'edit', 'Edit lineup');
+  label('[data-manage="lineup"]', 'edit', 'Edit standards');
   label('#btn-add-prize', 'plus', 'Add prize');
-  label('#btn-add-behavior', 'plus', 'Add to lineup');
+  label('#btn-add-behavior', 'plus', 'Add a standard');
   const avatarInput = $('#avatar-file');
   label('#avatar-pick', 'camera', 'Player photo');
   $('#avatar-pick').prepend(avatarInput);
@@ -154,7 +155,7 @@
       db.from('ledger').select('*').eq('kind', 'redeem').order('created_at', { ascending: false }).limit(50),
       db.from('journal').select('*').order('day', { ascending: false }).limit(60),
       db.rpc('player_stats'),
-      db.from('lineup_requests').select('*').order('created_at'),
+      db.from('self_ratings').select('*').gte('day', RR.addDays(localDay(), -14)),
       db.from('activity').select('*').order('created_at', { ascending: false }).limit(40),
       db.rpc('my_notifications')
     ]);
@@ -173,9 +174,10 @@
     // Optional pieces: an older database without them still works.
     state.journalMissing = !!jr.error;
     state.journal = jr.error ? [] : jr.data;
-    state.clubMissing = !!(ps.error || rq.error);
+    state.clubMissing = !!ps.error;
+    state.gameMissing = !!rq.error || !('description' in (b.data[0] || { description: '' }));
     state.stats = ps.error ? null : ps.data;
-    state.requests = rq.error ? [] : rq.data;
+    state.self = rq.error ? [] : rq.data;
     state.activityMissing = !!ac.error;
     state.activity = ac.error ? [] : ac.data;
     state.notif = nt.error ? null : nt.data;
@@ -189,7 +191,7 @@
   function subscribe() {
     if (channel) return;
     channel = db.channel('family');
-    ['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'lineup_requests', 'activity'].forEach(table =>
+    ['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'self_ratings', 'activity'].forEach(table =>
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, reloadSoon));
     // Something Jaylen just did: pop it up right away.
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, ({ new: a }) => alertActivity(a));
@@ -207,7 +209,6 @@
 
   // ---------------------------------------------------------------- model
   const kidName = () => (state.settings && state.settings.kid_name) || 'Jaylen';
-  const todayRequests = () => state.requests.filter(q => q.day === localDay());
 
   function model() {
     return RR.model({
@@ -218,7 +219,7 @@
       recent: state.ledger,
       journal: state.journal,
       stats: state.stats,
-      pending: state.clubMissing ? null : state.requests
+      self: state.self
     });
   }
 
@@ -238,18 +239,14 @@
     if (shownBalance !== null && shownBalance !== m.balance) { bal.dataset.v = shownBalance; RR.countTo(bal, m.balance); }
     $('#c-bar').innerHTML = RR.xpBar(m);
 
-    // Dugout: check-ins waiting for approval, a new postgame interview, the next prize.
+    // Dugout: his scouting report (your turn to rate), a new postgame interview, the next prize.
     const cards = [];
-    const reqs = todayRequests().map(q => ({ q, b: state.behaviors.find(x => x.id === q.behavior_id) })).filter(x => x.b);
-    if (reqs.length) {
-      const total = reqs.reduce((a, x) => a + x.b.points, 0);
-      cards.push(RR.dcard({ color: 'yellow wide', kicker: 'Pending approval', ic: 'clock',
-        title: `${reqs.length} check-in${reqs.length === 1 ? '' : 's'}`,
-        body: `+${total} XP waiting<div class="dlist">${reqs.map(({ q, b }) => `<div class="drow">
-            <div><b>${esc(b.name)}</b><small>${RR.timeOf(q.created_at)} · +${b.points} XP</small></div>
-            <button class="rbtn ok" data-approve="${b.id}" aria-label="Approve ${esc(b.name)}">${icon('check')}</button>
-            <button class="rbtn" data-decline="${q.id}" aria-label="Decline ${esc(b.name)}">${icon('x')}</button></div>`).join('')}</div>`,
-        acts: reqs.length > 1 ? `<button class="btn sm ink block" data-approve-all>Approve all · +${total} XP</button>` : '' }));
+    const left = m.lineup.length - m.doneCount;
+    const reportWaiting = !!m.filedAt && left > 0;
+    if (reportWaiting) {
+      cards.push(RR.dcard({ color: 'yellow', kicker: 'Scouting report', ic: 'stats', title: `${kidName()} filed his report`,
+        body: `He rated himself on ${m.selfCount} standard${m.selfCount === 1 ? '' : 's'}. Your turn: ${left} left to rate.`,
+        acts: `<button class="btn sm ink" data-go="lineup">Rate today</button>` }));
     }
     if (journalUnread()) {
       const j = state.journal[0], md = RR.mood(j.mood);
@@ -258,30 +255,28 @@
     }
     cards.push(RR.ondeckCard(m));
     cards.push(RR.dcard({ kicker: 'Quick add', ic: 'plus', title: 'Bonus XP', body: 'Reward extra effort with a reason.', attrs: 'data-bonus' }));
-    const live = todayRequests().length + (journalUnread() ? 1 : 0);
+    const live = (reportWaiting ? 1 : 0) + (journalUnread() ? 1 : 0);
     $('#c-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>new</small></span></div>
       <div class="dugout">${cards.join('')}</div>`;
 
-    // Tabbed card: today's lineup (tap to award), scoreboard, highlights.
-    const open = m.lineup.filter(b => b.status !== 'done').sort((a, b) => (b.status === 'pending') - (a.status === 'pending'));
-    const lineupPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm dark" data-go="lineup">All ${m.lineup.length}</button></div>` +
-      (open.length ? RR.tiles(open.slice(0, 6), 'parent', true) : '<p class="empty">Every daily item is done. Great day.</p>');
+    // Tabbed card: today's Game Plan (his rating and yours), scoreboard, highlights.
+    const planPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm" data-go="lineup">${left ? 'Rate today' : 'Game Plan'}</button></div>` +
+      RR.gameSummary(m, kidName());
     $('#c-tabs').innerHTML = RR.tabcard('club', [
-      { key: 'lineup', label: 'Today’s Lineup', html: lineupPane },
+      { key: 'lineup', label: 'Today’s Game Plan', html: planPane },
       { key: 'score', label: 'Scoreboard', html: RR.scoreboard(m) + '<div style="margin-top:12px">' + RR.statGrid(m) + '</div>' },
       { key: 'high', label: 'Highlights', html: RR.highlights(m) }
     ]);
   }
 
   function renderLineup(m) {
-    $('#l-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · Tap to award XP';
+    $('#l-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · Rate each standard';
+    const filed = m.filedAt ? `${kidName()} filed his scouting report${m.filedAt !== 'yes' ? ' at ' + RR.timeOf(m.filedAt) : ''}. His rating is shown on each standard.`
+      : `${kidName()} hasn’t filed tonight’s scouting report yet.`;
     $('#l-summary').innerHTML = `<div class="pane-head" style="margin:0">${RR.diamond(m)}
-      <div style="text-align:right"><span class="label">Today</span><b class="num" style="font-size:28px;color:var(--gold)">+${fmt(m.todayXP)}</b></div></div>`;
-    const cat = c => m.lineup.filter(b => b.cat === c);
-    $('#l-groups').innerHTML = RR.tabcard('lineup', [
-      { key: 'home', label: `Home & School · ${cat('home').length}`, html: RR.tiles(cat('home'), 'parent') },
-      { key: 'sports', label: `On the Field · ${cat('sports').length}`, html: RR.tiles(cat('sports'), 'parent') }
-    ]);
+      <div style="text-align:right"><span class="label">Today</span><b class="num" style="font-size:28px;color:var(--gold)">+${fmt(m.todayXP)}</b></div></div>
+      <p class="muted" style="margin:10px 0 0;font-size:13.5px">${esc(filed)} Solid, Strong and All-Star earn 1×, 2× or 3× a standard’s XP.</p>`;
+    $('#l-groups').innerHTML = RR.gamePlan(m, 'parent', { kidName: kidName() });
   }
 
   function renderLocker(m) {
@@ -306,60 +301,76 @@
     renderHistory();
   }
 
-  // ---------------------------------------------------------------- awarding
+  // ---------------------------------------------------------------- rating the Game Plan
   const busy = new Set();
-  // quiet: used by "Approve all" (no repeat check, no toast). Returns the XP awarded.
-  async function award(id, row, quiet = false) {
+  const todaysRating = id => state.ledger.find(r => r.kind === 'earn' && r.behavior_id === id && r.day === localDay());
+
+  // Set today's rating for a standard (0 clears it). One rating per standard
+  // per day; the database enforces that even if both parents tap at once.
+  async function rate(id, level, quiet = false) {
     const b = state.behaviors.find(x => x.id === id);
-    if (!b || busy.has(id)) return 0;
-    const today = localDay();
-    const earns = state.ledger.filter(r => r.kind === 'earn' && r.behavior_id === id && r.day === today);
-    const clearRequest = () => {
-      const req = todayRequests().find(q => q.behavior_id === b.id);
-      if (req) { db.from('lineup_requests').delete().eq('id', req.id).then(() => {}); state.requests = state.requests.filter(q => q !== req); }
-    };
-    if (b.once_daily && earns.length) {
-      clearRequest(); render();
-      if (!quiet) toast(`${b.name}: already completed today.`);
-      return 0;
-    }
-    if (!quiet && !b.once_daily && earns.length && Date.now() - new Date(earns[0].created_at).getTime() < REPEAT_WARN_MS) {
-      if (!await confirmSheet('Award again?', `“${b.name}” was awarded a moment ago. Give another +${b.points} XP?`, 'Award again')) return 0;
-    }
+    if (!b || busy.has(id)) return;
+    const row = todaysRating(id);
+    const prev = row ? (row.level || Math.max(1, Math.min(3, Math.round(row.points / Math.max(1, b.points))))) : 0;
+    if (prev === level) return;
     busy.add(id);
-    if (row) { row.classList.remove('pop'); void row.offsetWidth; row.classList.add('pop'); }
     const before = model();
-    const { data, error } = await db.from('ledger').insert({
-      day: today, kind: 'earn', points: b.points, reason: b.name, emoji: b.emoji,
-      behavior_id: b.id, once_daily: b.once_daily
-    }).select().single();
+    // (Before add-gameplan.sql there's no level column; the level is then read from the XP.)
+    const lv = state.gameMissing ? {} : { level };
+    const res = level === 0 ? await db.from('ledger').delete().eq('id', row.id)
+      : row ? await db.from('ledger').update({ points: b.points * level, ...lv }).eq('id', row.id).select().single()
+      : await db.from('ledger').insert({ day: localDay(), kind: 'earn', points: b.points * level, ...lv, reason: b.name, emoji: b.emoji, behavior_id: b.id, once_daily: true }).select().single();
     busy.delete(id);
-    if (error) {
-      if (error.code === '23505') { clearRequest(); if (!quiet) toast(`${b.name}: already completed today (maybe the other parent just did it).`); }
-      else toast(friendly(error), { warn: true });
+    if (res.error) {
+      const clash = res.error.code === '23505';
+      toast(clash ? `${b.name}: the other parent just rated it. Showing their rating.` : friendly(res.error), { warn: !clash });
       loadAll();
-      return 0;
+      return;
     }
-    clearRequest();   // a check-in for this item is now settled
-    state.ledger.unshift(data);
-    state.balance += b.points;
-    if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + b.points, tasks_completed: state.stats.tasks_completed + 1 };
+    // Show it right away; the reload that follows confirms it.
+    const delta = (level ? b.points * level : 0) - (row ? row.points : 0);
+    state.ledger = state.ledger.filter(r => r !== row);
+    if (level) state.ledger.unshift(res.data);
+    state.balance += delta;
+    if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + delta,
+      tasks_completed: state.stats.tasks_completed + (row ? 0 : 1) - (level ? 0 : 1) };
     render();
-    if (!quiet) announce(before, model(), `+${b.points} XP · ${b.name}`, () => undo(data));
-    return b.points;
+    if (quiet) return;
+    const msg = level ? `${b.name}: ${RR.ratingLabel(level)} · ${delta >= 0 ? '+' : '−'}${Math.abs(delta)} XP` : `${b.name}: rating cleared`;
+    announce(before, model(), msg, async () => { await rate(id, prev, true); toast('Undone'); });
   }
 
-  async function approveAll(btn) {
-    const ids = todayRequests().map(q => q.behavior_id);
-    if (!ids.length) return;
-    btn.disabled = true;
-    const before = model();
-    let xp = 0;
-    for (const id of ids) xp += await award(id, null, true);
-    const after = model();
-    if (after.level.idx > before.level.idx) burst(60);
-    toast(`Approved ${ids.length} check-in${ids.length === 1 ? '' : 's'} · +${xp} XP` + (after.level.idx > before.level.idx ? ` · Level up: ${after.level.name}` : ''));
-    loadAll();
+  // Recognize a standout moment, with a note about what he did.
+  function momentSheet(id) {
+    const b = state.behaviors.find(x => x.id === id);
+    let amt = b.points * 2;
+    const s = sheet(`<h3>Recognize a moment</h3>
+      <p class="muted" style="margin-top:0">${esc(b.name)} · ${RR.CATEGORIES[RR.catOf(b)]}</p>
+      <label class="field"><span class="label">What did he do?</span>
+        <textarea class="input" name="note" rows="2" maxlength="140" placeholder="e.g. Helped his sister with her homework without being asked"></textarea></label>
+      <div class="field"><span class="label" style="margin-bottom:6px">XP</span>
+        <div class="chips">${[1, 2, 3].map(k => `<button type="button" class="chip${k === 2 ? ' on' : ''}" data-amt="${b.points * k}">+${b.points * k} XP</button>`).join('')}</div></div>
+      <p class="err"></p>
+      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-save>${icon('star')}Recognize</button></div>`);
+    s.el.querySelectorAll('[data-amt]').forEach(c => c.addEventListener('click', () => {
+      amt = +c.dataset.amt;
+      s.el.querySelectorAll('[data-amt]').forEach(x => x.classList.toggle('on', x === c));
+    }));
+    s.on('[data-save]', async btn => {
+      const note = s.el.querySelector('[name=note]').value.trim();
+      btn.disabled = true;
+      const before = model();
+      const { data, error } = await db.from('ledger').insert({ day: localDay(), kind: 'moment', points: amt, reason: note || b.name, emoji: b.emoji, behavior_id: b.id }).select().single();
+      btn.disabled = false;
+      if (error) { s.err(friendly(error)); return; }
+      s.close();
+      state.ledger.unshift(data);
+      state.balance += amt;
+      if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + amt };
+      render();
+      announce(before, model(), `Moment recognized · +${amt} XP`, () => undo(data));
+      loadAll();
+    });
   }
 
   // Toast for an award, plus level-ups and prizes that just unlocked.
@@ -377,13 +388,6 @@
     if (error) { toast(friendly(error), { warn: true }); return; }
     toast('Undone');
     state.ledger = state.ledger.filter(x => x.id !== row.id);
-    loadAll();
-  }
-
-  async function decline(reqId) {
-    const { error } = await db.from('lineup_requests').delete().eq('id', reqId);
-    if (error) { toast(friendly(error), { warn: true }); return; }
-    toast('Check-in declined');
     loadAll();
   }
 
@@ -632,23 +636,24 @@
   }
 
   function openNotifications() {
+    const m = model();
     const fresh = new Set(unread().map(a => a.id));
     if (state.activity.length) store.set('notifSeen', state.activity[0].created_at);
     renderBell();
     sheet(`<h3>Notifications</h3>
       ${state.activity.length ? `<ul class="list notif-list">${state.activity.map(a => `<li class="${fresh.has(a.id) ? 'new' : ''}">
-          <span class="mark ${a.kind === 'journal' ? 'journal' : ''}">${icon(a.kind === 'journal' ? 'mic' : 'clock', 'sm')}</span>
+          <span class="mark ${a.kind === 'journal' ? 'journal' : ''}">${icon(a.kind === 'journal' ? 'mic' : a.kind === 'report' ? 'stats' : 'clock', 'sm')}</span>
           <span class="grow"><b>${esc(a.title)}</b><small>${esc(a.body)}</small><small class="when">${RR.dayLabel(RR.localDay(new Date(a.created_at)))} · ${RR.timeOf(a.created_at)}</small></span></li>`).join('')}</ul>`
-        : `<p class="empty">Nothing yet. When ${esc(kidName())} checks in a lineup item or answers his postgame interview, it shows up here.</p>`}
-      <div class="btns"><button class="btn ghost" data-close>Close</button>${todayRequests().length ? `<button class="btn" data-close data-go-approve>Review check-ins</button>` : ''}</div>`)
-      .on('[data-go-approve]', () => goTab('clubhouse'));
+        : `<p class="empty">Nothing yet. When ${esc(kidName())} files his scouting report or answers his postgame interview, it shows up here.</p>`}
+      <div class="btns"><button class="btn ghost" data-close>Close</button>${m.filedAt && m.doneCount < m.lineup.length ? `<button class="btn" data-close data-go-rate>Rate today</button>` : ''}</div>`)
+      .on('[data-go-rate]', () => goTab('lineup'));
   }
 
   // A new activity row arrived live from the database.
   function alertActivity(a) {
-    toast(a.title, { action: { label: a.kind === 'journal' ? 'Read' : 'Review', run: () => {
+    toast(a.title, { action: { label: a.kind === 'journal' ? 'Read' : a.kind === 'report' ? 'Rate' : 'Review', run: () => {
       if (a.kind === 'journal') { goTab('stats'); $('#postgame [data-pane=postgame]').click(); $('#postgame').scrollIntoView(); }
-      else goTab('clubhouse');
+      else goTab(a.kind === 'report' ? 'lineup' : 'clubhouse');
     } } });
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
       try { new Notification(a.title, { body: a.body, icon: 'icons/icon-192.png', tag: a.id }); } catch { /* not supported here */ }
@@ -669,7 +674,7 @@
     else status = `${icon('check', 'sm')}<span>Email is set up.</span>`;
     const deviceBtn = 'Notification' in window && Notification.permission !== 'granted'
       ? `<button class="btn sm ghost" data-device-alerts>${icon('bell')}Pop-ups on this device</button>` : '';
-    box.innerHTML = `<p class="muted" style="margin:0 0 12px;font-size:13.5px">You’ll hear about it when ${esc(kidName())} checks in a lineup item or answers his postgame interview: the bell up top, a pop-up while the app is open, and email.</p>
+    box.innerHTML = `<p class="muted" style="margin:0 0 12px;font-size:13.5px">You’ll hear about it when ${esc(kidName())} files his scouting report or answers his postgame interview: the bell up top, a pop-up while the app is open, and email.</p>
       <label class="toggle"><span><b>Email me</b><small>${esc(state.user.email)} · several taps in a row arrive as one email</small></span>
         <span class="switch"><input type="checkbox" id="notify-email" ${n.notify_email ? 'checked' : ''}><i></i></span></label>
       <div class="notify-status">${status}</div>
@@ -707,10 +712,10 @@
       const first = i === 0 || m.lineup[i - 1].cat !== b.cat;
       return (first ? `<li class="day-head" style="border:0;padding-bottom:0">${RR.CATEGORIES[b.cat]}</li>` : '') + `<li>
         <span class="lu-no" style="width:30px;height:30px;font-size:15px">${b.order}</span>
-        <span class="grow"><b>${esc(b.name)}</b><small>+${b.points} XP · ${b.once_daily ? 'Once a day' : 'Any time'}</small></span>
+        <span class="grow"><b>${esc(b.name)}</b><small>Solid +${b.points} · Strong +${b.points * 2} · All-Star +${b.points * 3}</small></span>
         <button class="icon-btn" data-move="${b.id}" aria-label="Move up" ${first ? 'disabled' : ''}>${icon('up', 'sm')}</button>
         <button class="icon-btn" data-edit-b="${b.id}" aria-label="Edit">${icon('edit', 'sm')}</button></li>`;
-    }).join('') || '<li class="empty" style="display:block">The lineup is empty.</li>';
+    }).join('') || '<li class="empty" style="display:block">No standards yet.</li>';
     if (!state.settings) return;
     const st = state.settings;
     $('#avatar-thumb').innerHTML = st.avatar_url ? `<img src="${esc(st.avatar_url)}" alt="">` : icon('camera');
@@ -725,7 +730,10 @@
     $('#kid-link').textContent = kidLink();
     $('#open-kid-link').href = kidLink();
     renderNotifyPanel();
-    $('#upgrade-note').innerHTML = state.clubMissing
+    $('#upgrade-note').innerHTML = state.gameMissing && !state.clubMissing
+      ? `<div class="alert amber" style="margin-top:0">${icon('bolt')}<span class="grow"><b>One-time database upgrade</b>
+          <small>Run <code>supabase/add-gameplan.sql</code> in Supabase’s SQL Editor to switch to the Game Plan standards.</small></span></div>`
+      : state.clubMissing
       ? `<div class="alert amber" style="margin-top:0">${icon('bolt')}<span class="grow"><b>One-time database upgrade</b>
           <small>Run <code>supabase/add-clubhouse.sql</code> in Supabase’s SQL Editor to turn on jersey numbers, lifetime XP levels and check-in approvals.</small></span></div>` : '';
   }
@@ -752,7 +760,7 @@
     const i = list.findIndex(b => b.id === id);
     if (i < 1 || list[i - 1].cat !== list[i].cat) return;
     [list[i - 1], list[i]] = [list[i], list[i - 1]];
-    state.behaviors = list.map(({ order, cat, n, status, ...b }) => b);
+    state.behaviors = list.map(({ order, cat, rating, level, self, moments, status, ...b }) => b);
     render();
     const results = await Promise.all(list.map((b, k) => b.sort === k + 1 ? null : db.from('behaviors').update({ sort: k + 1 }).eq('id', b.id)));
     if (results.some(r => r && r.error)) toast('Could not save the new order', { warn: true });
@@ -763,16 +771,16 @@
 
   function behaviorSheet(b) {
     const isNew = !b;
-    b = b || { name: '', emoji: '⭐', points: 3, once_daily: true, category: 'home' };
+    b = b || { name: '', description: '', emoji: '⭐', points: 2, category: 'home' };
     let category = RR.catOf(b);
-    const s = sheet(`<h3>${isNew ? 'Add to lineup' : 'Edit lineup item'}</h3>
-      <label class="field"><span class="label">Activity</span><input class="input" name="name" maxlength="60" value="${esc(b.name)}" placeholder="e.g. Morning routine"></label>
-      <label class="field"><span class="label">XP value</span>
+    const s = sheet(`<h3>${isNew ? 'Add a standard' : 'Edit standard'}</h3>
+      <label class="field"><span class="label">Standard</span><input class="input" name="name" maxlength="40" value="${esc(b.name)}" placeholder="e.g. Own Your Responsibilities"></label>
+      <label class="field"><span class="label">What it looks like</span>
+        <textarea class="input" name="desc" rows="3" maxlength="240" placeholder="e.g. Ready on time, chores done, bedtime routine, all without reminders.">${esc(b.description || '')}</textarea></label>
+      <div class="field"><span class="label" style="margin-bottom:6px">Arena</span>
+        <div class="chips">${RR.ARENAS.map(k => `<button type="button" class="chip" data-cat="${k}">${RR.CATEGORIES[k]}</button>`).join('')}</div></div>
+      <label class="field"><span class="label">XP for Solid (Strong = 2×, All-Star = 3×)</span>
         <div class="stepper"><button type="button" data-step="-1">−</button><input class="input" name="points" type="number" inputmode="numeric" min="1" value="${b.points}"><button type="button" data-step="1">+</button></div></label>
-      <div class="field"><span class="label" style="margin-bottom:6px">Category</span>
-        <div class="chips">${Object.entries(RR.CATEGORIES).map(([k, v]) => `<button type="button" class="chip" data-cat="${k}">${v}</button>`).join('')}</div></div>
-      <label class="toggle"><span><b>Once a day</b><small>Blocks a second award on the same day</small></span>
-        <span class="switch"><input type="checkbox" name="once" ${b.once_daily ? 'checked' : ''}><i></i></span></label>
       <p class="err"></p>
       <div class="btns">${isNew ? '<button class="btn ghost" data-close>Cancel</button>' : '<button class="btn red" data-del>Delete</button>'}<button class="btn" data-save>Save</button></div>`);
     stepper(s.el);
@@ -781,23 +789,23 @@
     paintCat();
     s.on('[data-save]', async btn => {
       const name = s.el.querySelector('[name=name]').value.trim();
+      const description = s.el.querySelector('[name=desc]').value.trim();
       const points = parseInt(s.el.querySelector('[name=points]').value, 10);
-      const once_daily = s.el.querySelector('[name=once]').checked;
       if (!name) { s.err('Give it a name.'); return; }
       if (!(points > 0)) { s.err('XP must be at least 1.'); return; }
       btn.disabled = true;
-      const row = { name, points, once_daily, category, emoji: b.emoji || '⭐' };
+      const row = { name, description, points, once_daily: true, category, emoji: b.emoji || '⭐' };
       if (isNew) row.sort = Math.max(0, ...state.behaviors.map(x => x.sort)) + 1;
       const { error } = isNew ? await db.from('behaviors').insert(row) : await db.from('behaviors').update(row).eq('id', b.id);
       btn.disabled = false;
       if (error) { s.err(friendly(error)); return; }
-      s.close(); toast(isNew ? 'Added to the lineup' : 'Saved'); loadAll();
+      s.close(); toast(isNew ? 'Standard added' : 'Saved'); loadAll();
     });
     s.on('[data-del]', async () => {
       if (!await confirmSheet(`Delete “${b.name}”?`, 'XP he already earned for it stays in his balance and history.', 'Delete', 'red')) return;
       const { error } = await db.from('behaviors').delete().eq('id', b.id);
       if (error) { toast(friendly(error), { warn: true }); return; }
-      s.close(); toast('Removed from the lineup'); loadAll();
+      s.close(); toast('Standard removed'); loadAll();
     });
   }
 
@@ -874,16 +882,14 @@
 
   // One listener for every tappable thing inside the app.
   $('#screen-app').addEventListener('click', e => {
-    const t = e.target.closest('[data-go],[data-manage],[data-award],[data-approve-all],[data-approve],[data-decline],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-bonus],[data-edit-b],[data-move]');
+    const t = e.target.closest('[data-go],[data-manage],[data-rate],[data-moment],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-bonus],[data-edit-b],[data-move]');
     if (!t) return;
     const d = t.dataset;
     if (t.id === 'manage-back') { goTab(state.prevTab); return; }
     if (d.go) goTab(d.go);
     else if (d.manage) { goTab('manage'); $('#manage-lineup').scrollIntoView(); }
-    else if (d.award) award(d.award, t);
-    else if ('approveAll' in d) approveAll(t);
-    else if (d.approve) award(d.approve, null);
-    else if (d.decline) decline(d.decline);
+    else if (d.rate) rate(d.rate, +d.level);
+    else if (d.moment) momentSheet(d.moment);
     else if (d.redeem) redeem(d.redeem, t);
     else if (d.editPrize) prizeSheet(state.rewards.find(r => r.id === d.editPrize));
     else if (d.delRow) removeRow(d.delRow);

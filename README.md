@@ -8,16 +8,16 @@ A player-development app for Jaylen. Mom and Dad each sign in on their own phone
 - **Clubhouse:** a dashboard.
   - **Baseball card:** his personalized card. Tap it to flip to the stat sheet on the back.
   - **XP and levels:** his XP balance and level, plus a bar showing XP spent, his balance and how far he is from the next level.
-  - **Dugout:** check-ins to approve, new postgame interviews, the next prize and quick Bonus XP.
-  - **Tabbed card:** Today's Lineup (with an infield diamond that fills its bases as he completes things), Scoreboard and Highlights.
-- **Lineup:** tap any item to award XP (two taps from opening the app). Bonus XP lives here too.
+  - **Dugout:** his scouting report when he files it, new postgame interviews, the next prize and quick Bonus XP.
+  - **Tabbed card:** Today's Game Plan (his rating and yours for every standard, with an infield diamond that fills its bases), Scoreboard and Highlights.
+- **Game Plan:** rate each standard for the day, and recognize standout moments. Bonus XP lives here too.
 - **Prize Locker:** add prizes with product photos, set XP costs and redeem.
 - **Stats:** weekly box score, season stats, the Trophy Case, Road to the Hall, his Postgame Interviews (read and reply) and the full game log.
-- **Front Office** (gear icon): player card (photo, name, jersey #, position), lineup and XP values, postgame XP, his dashboard link and your account.
+- **Front Office** (gear icon): player card (photo, name, jersey #, position), the Game Plan standards and their XP, postgame XP, notifications, his dashboard link and your account.
 
 **Player dashboard** (`kid.html#…`)
-- The same four tabs, built for him: player card, today's lineup, stats, Prize Locker, Trophy Case.
-- **I did it:** he taps this on a lineup item. It shows as **Pending Approval** until a parent approves it (which awards the XP) or declines it.
+- The same four tabs, built for him: player card, the Game Plan, stats, Prize Locker, Trophy Case.
+- **Scouting report:** each evening he rates himself on every standard and files it. You see his rating next to yours. **Your rating earns the XP; his never does.**
 - **Postgame Interview:** a new question each day. He picks how he's feeling and writes an answer. Answering earns XP (+2 by default), once a day.
 - **Celebrations** for XP earned, level-ups, unlocked prizes and your replies.
 - **Limits:** he can't award XP, redeem prizes or change anything else.
@@ -26,7 +26,13 @@ A player-development app for Jaylen. Mom and Dad each sign in on their own phone
 - **XP balance** is what he spends in the Prize Locker. XP only goes up, except when a prize is redeemed. A mistaken award can still be undone.
 - **Levels** come from **lifetime XP**, so redeeming a prize never lowers his level: Rookie (0), Prospect (100), Starter (300), All-Star (600), MVP (1,200), Hall of Famer (2,500).
 - **Trophy Case:** First Pitch, Hot Streak (3 days), Iron Man (7 days), Double Digits (10 tasks), Grinder (50 tasks), Team Player (10 on-field awards), Closer (first prize) and Postgame Pro (7 interviews).
-- **Lineup categories:** **Home & School** and **On the Field**. On the Field is about his approach to the game, not his stats.
+- **The Game Plan** is a guide to how he shows up, not a to-do list. It has three arenas with a few standards each, and every standard says what it looks like:
+  - **At Home:** Own Your Responsibilities, and Respect & Kindness.
+  - **Learning:** Homework & Study Habits, and Learner's Mindset.
+  - **On the Field:** Compete Every Rep, Great Teammate, and Coachable.
+- **Daily ratings:** you rate each standard once a day. **Solid / Strong / All-Star** earn 1× / 2× / 3× its XP (+2 / +4 / +6 by default). **Not today** earns nothing.
+- **Moments:** **Recognize a moment** adds XP with a note about what he did, such as "helped his sister without being asked".
+- **Editing:** edit the standards, their descriptions and their XP in the Front Office.
 
 **How it's built:** plain HTML, CSS and JavaScript with no build step. **Supabase** (free tier) provides the database, logins, photo storage and live sync. **Netlify** (free tier) hosts the site.
 
@@ -43,6 +49,7 @@ Already using the app? Run each file below that you haven't run yet in Supabase 
 | `supabase/add-journal.sql` | the Postgame Interview |
 | `supabase/add-clubhouse.sql` | **The Clubhouse redesign:** jersey # and position, check-in approvals, and lifetime-XP levels and stats |
 | `supabase/add-notifications.sql` | **Notifications:** the bell, pop-ups, and email when Jaylen does something |
+| `supabase/add-gameplan.sql` | **The Game Plan:** swaps the old task list for the 7 standards, daily ratings, moments and his scouting report (run after add-notifications.sql) |
 
 New installs only need `setup.sql`.
 
@@ -112,7 +119,7 @@ In Supabase, go to **Authentication → URL Configuration** and set **Site URL**
 
 ## Notifications
 
-When Jaylen **checks in a lineup item** or **answers his Postgame Interview**, you find out three ways:
+When Jaylen **files his scouting report** or **answers his Postgame Interview**, you find out three ways:
 
 1. **Bell (top right):** a red badge counts what's new. Tap it for the feed.
 2. **Pop-up:** appears on any parent phone that has the app open.
@@ -146,19 +153,18 @@ The key is stored in a private part of the database that the website can't read.
 
 | You want to… | Do this |
 |---|---|
-| Award XP | **Lineup** → tap the item. Mis-tapped? Tap **Undo** in the pop-up. |
-| Approve his check-ins | **Clubhouse** → **Pending Approval** → **Approve** (or ✕ to decline). Tapping the item in the Lineup also approves it. |
-| Give bonus XP | **Lineup** → **Bonus XP** → amount → reason |
+| Rate his day | **Game Plan** → tap Solid, Strong or All-Star on each standard (tap again to change; **Not today** clears it). Mis-tapped? **Undo** in the pop-up. |
+| Recognize a moment | **Game Plan** → **Recognize a moment** on the standard → what he did → XP |
+| See how he rated himself | **Game Plan** (his rating is on each standard) or the Clubhouse → **Today's Game Plan** |
+| Give bonus XP | **Game Plan** → **Bonus XP** → amount → reason |
 | Redeem a prize | **Prize Locker** → **Redeem** (only lit up once he has enough XP) |
 | Fix a mistake | **Stats → Game Log** → trash icon next to the entry |
-| Edit the lineup / XP values | gear → **Lineup & XP Values** (or **Lineup → Edit lineup**) |
+| Edit standards / XP | gear → **Game Plan Standards** (or **Game Plan → Edit standards**) |
 | Add a prize with a photo | **Prize Locker → Add prize → Choose photo** (edit one with the pencil) |
 | Read and reply to his answers | **Stats → Postgame Interviews → Reply** (a new one also shows on the Clubhouse) |
 | Jersey #, position, photo | gear → **Player Card** |
 
-**Duplicate protection:**
-- **Once a day items** can only be earned once per day, and show **Completed** after that. The database enforces this, so it holds even if both of you tap at the same moment.
-- **Any time items** can be earned several times a day. A second tap within 90 seconds asks "Award again?" first.
+**One rating per standard per day:** changing a rating replaces it rather than adding more XP. The database enforces this, so it holds even if both of you tap at the same moment.
 
 **Sync:** changes show up on the other parent's phone within a second or two (the **● Live** dot shows the connection). His dashboard refreshes every 15 seconds.
 
@@ -170,7 +176,7 @@ The key is stored in a private part of the database that the website can't read.
 
 - All data is stored in your Supabase database, so nothing is lost when you refresh or switch phones.
 - The database only lets in the emails listed in the `parents` table. Everyone else sees nothing, even with a valid login.
-- Jaylen's link contains a long random secret. It can read his dashboard, check in a lineup item for **your approval**, and save **his own postgame answer for today**. It can't award XP, redeem prizes or change anything else.
+- Jaylen's link contains a long random secret. It can read his dashboard, save **his own ratings for today** (which never award XP), and save **his own postgame answer for today**. It can't award XP, redeem prizes or change anything else.
 - Anyone holding his link could read his recent answers, so treat it like a key. If it ever gets shared, tap **New link** in the Front Office and the old link stops working.
 - Photos are stored with hard-to-guess file names. Anyone holding a photo's exact link could view that photo.
 

@@ -2,8 +2,9 @@
 //
 // No login: the secret in the link (kid.html#<secret>) is passed to the
 // kid_dashboard() database function, which returns a read-only snapshot.
-// From here he can only (1) check in a lineup item for a parent to approve
-// and (2) answer today's postgame question. He can't award XP or redeem.
+// From here he can only (1) rate himself on the Game Plan ("file his
+// scouting report") and (2) answer today's postgame question. His ratings
+// never award XP (his parents' ratings do), and he can't redeem.
 
 (() => {
   const { client: db, esc, $, $$, localDay, icon, fmt, store, toast } = RR;
@@ -11,7 +12,7 @@
 
   // ---------------------------------------------------------------- chrome
   $$('.js-mark').forEach(el => { el.outerHTML = RR.brandMark(el.closest('.topbar') ? 'brand-mark' : 'hero-mark'); });
-  [['clubhouse', 'clubhouse', 'Clubhouse'], ['lineup', 'lineup', 'Lineup'], ['locker', 'locker', 'Prize Locker'], ['stats', 'stats', 'Stats']]
+  [['clubhouse', 'clubhouse', 'Clubhouse'], ['lineup', 'lineup', 'Game Plan'], ['locker', 'locker', 'Prize Locker'], ['stats', 'stats', 'Stats']]
     .forEach(([id, ic, text]) => { $('#nav-' + id).innerHTML = icon(ic) + `<span>${text}</span>`; });
 
   function message(title, body) {
@@ -52,7 +53,8 @@
   function render() {
     const m = model();
     document.title = `${m.name} · The Clubhouse`;
-    const mode = m.canRequest ? 'kid-can-request' : 'kid';
+    const draft = getDraft();
+    const canRate = Array.isArray(data.self);   // database has the Game Plan
 
     // Clubhouse
     $('#k-card').innerHTML = RR.baseballCard(m);
@@ -66,45 +68,47 @@
     $('#k-top').innerHTML = `<span class="hchip">${icon('bolt')}<b>${fmt(m.balance)}</b>XP</span>` +
       (m.streak ? `<span class="hchip hot">${icon('flame')}<b>${m.streak}</b></span>` : '');
 
-    // Dugout: check-ins waiting, the latest reply, the next prize.
+    // Dugout: tonight's scouting report, the latest reply, the next prize.
     // (Today's question has its own big card above.)
     const cards = [];
     const answered = (data.journal || []).some(j => j.day === localDay());
-    const waiting = m.lineup.filter(b => b.status === 'pending');
-    if (waiting.length) {
-      cards.push(RR.dcard({ color: 'yellow', kicker: 'Pending approval', ic: 'clock', title: `${waiting.length} waiting`,
-        body: esc(waiting.map(b => b.name).join(', ')) + '. A parent will approve them.', attrs: 'data-go="lineup"' }));
+    const needsReport = canRate && !m.filedAt && m.lineup.length > 0;
+    if (needsReport) {
+      cards.push(RR.dcard({ color: 'yellow', kicker: 'Scouting report', ic: 'stats', title: 'Rate your day',
+        body: `How did you show up at home, in learning and on the field? Rate yourself on ${m.lineup.length} standards.`, attrs: 'data-go="lineup"' }));
     }
     const reply = (data.journal || []).find(j => j.parent_reply);
     if (reply) cards.push(RR.dcard({ color: 'peach', kicker: 'From Mom & Dad', ic: 'message', title: 'Coach’s note', body: esc(reply.parent_reply) }));
     cards.push(RR.ondeckCard(m));
-    const live = (('journal' in data && !answered) ? 1 : 0) + waiting.length;
+    const live = (('journal' in data && !answered) ? 1 : 0) + (needsReport ? 1 : 0);
     // On the Lineup tab, a pointer back to today's question until it's answered.
     $('#k-lineup-pg').innerHTML = 'journal' in data && !answered
       ? RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: 'Today’s question is up', body: esc(RR.promptFor(localDay())), attrs: 'data-postgame' }) : '';
     $('#k-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>to do</small></span></div>
       <div class="dugout">${cards.join('')}</div>`;
 
-    // Tabbed card: today's lineup, scoreboard, highlights.
-    const open = m.lineup.filter(b => b.status !== 'done').sort((a, b) => (a.status === 'pending') - (b.status === 'pending'));
-    const lineupPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm dark" data-go="lineup">All ${m.lineup.length}</button></div>` +
-      (open.length ? RR.tiles(open.slice(0, 6), mode, true) : '<p class="empty">Daily lineup complete. Great work today.</p>');
+    // Tabbed card: today's Game Plan (his rating and his parents'), scoreboard, highlights.
+    const planPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm" data-go="lineup">${needsReport ? 'Rate yourself' : 'Game Plan'}</button></div>` +
+      RR.gameSummary(m, 'You');
     $('#k-tabs').innerHTML = RR.tabcard('club', [
-      { key: 'lineup', label: 'Today’s Lineup', html: lineupPane },
+      { key: 'lineup', label: 'Today’s Game Plan', html: planPane },
       { key: 'score', label: 'Scoreboard', html: RR.scoreboard(m) + '<div style="margin-top:12px">' + RR.statGrid(m) + '</div>' },
       { key: 'high', label: 'Highlights', html: RR.highlights(m) }
     ]);
 
-    // Lineup
+    // Game Plan: rate yourself, then file your scouting report.
     $('#k-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-    $('#k-summary').innerHTML = `<div class="pane-head" style="margin:0">${RR.diamond(m)}
-      <div style="text-align:right"><span class="label">Today</span><b class="num" style="font-size:28px;color:var(--gold)">+${fmt(m.todayXP)}</b></div></div>
-      ${m.canRequest ? '<p class="muted" style="margin:10px 0 0;font-size:13px">Did something? Tap “I did it” and a parent will approve it.</p>' : ''}`;
-    const cat = c => m.lineup.filter(b => b.cat === c);
-    $('#k-groups').innerHTML = RR.tabcard('lineup', [
-      { key: 'home', label: `Home & School · ${cat('home').length}`, html: RR.tiles(cat('home'), mode) },
-      { key: 'sports', label: `On the Field · ${cat('sports').length}`, html: RR.tiles(cat('sports'), mode) }
-    ]);
+    const picks = m.lineup.filter(b => (draft[b.id] != null ? draft[b.id] : b.self) != null).length;
+    const changed = m.lineup.some(b => draft[b.id] != null && draft[b.id] !== b.self);
+    $('#k-summary').innerHTML = `<div class="report-bar">
+        <div><span class="label">Tonight’s scouting report</span><b class="num" style="font-size:28px">${picks}<small style="font-size:15px;color:var(--muted)"> / ${m.lineup.length} rated</small></b></div>
+        ${m.filedAt ? `<span class="rpill r1">${icon('check', 'sm')}Filed${m.filedAt !== 'yes' ? ' ' + RR.timeOf(m.filedAt) : ''}</span>` : ''}</div>
+      <p class="muted" style="margin:10px 0 0;font-size:13.5px">This is how we show up. Rate yourself on each standard, honestly. Great players know where they stand. Mom &amp; Dad add their rating, and theirs earns the XP.</p>`;
+    $('#k-groups').innerHTML = canRate
+      ? RR.gamePlan(m, 'kid', { draft }) + (picks && (changed || !m.filedAt)
+        ? `<div class="file-bar"><button class="btn block" data-file>${icon('check')}${m.filedAt ? 'Update my report' : `File my scouting report · ${picks}/${m.lineup.length}`}</button></div>`
+        : m.filedAt ? `<div class="filed-note">${icon('check', 'sm')}Report filed. Change any rating to update it.</div>` : '')
+      : '<div class="panel empty">The Game Plan is coming soon.</div>';
     renderJournal();
 
     // Prize Locker
@@ -121,18 +125,35 @@
     $('#k-log').innerHTML = RR.gameLogRows(m.recent.slice(0, 25));
   }
 
-  // ---------------------------------------------------------------- check-ins
-  async function request(id, btn) {
-    btn.disabled = true;
-    const { error } = await db.rpc('kid_request_task', { p_token: token, p_behavior_id: id, p_day: localDay() });
+  // ---------------------------------------------------------------- scouting report
+  // His picks are kept on the device until he files them.
+  const selfKey = () => 'selfdraft.' + localDay();
+  function getDraft() { try { return JSON.parse(store.get(selfKey()) || '{}'); } catch { return {}; } }
+  function setDraft(d) { store.set(selfKey(), JSON.stringify(d)); }
+
+  function pick(id, level) {
+    const d = getDraft();
+    d[id] = level;
+    setDraft(d);
+    render();
+  }
+
+  async function fileReport(btn) {
+    const m = model(), d = getDraft();
+    const ratings = {};
+    m.lineup.forEach(b => { const v = d[b.id] != null ? d[b.id] : b.self; if (v != null) ratings[b.id] = v; });
+    btn.disabled = true; btn.textContent = 'Filing…';
+    const { data: saved, error } = await db.rpc('kid_self_report', { p_token: token, p_day: localDay(), p_ratings: ratings });
     if (error) {
-      btn.disabled = false;
-      toast(/Failed to fetch|Load failed|NetworkError/i.test(error.message) ? 'No internet right now. Try again in a minute.' : error.message, { warn: true });
+      toast(/Failed to fetch|Load failed|NetworkError/i.test(error.message) ? 'No internet right now. Your picks are saved. Try again in a minute.' : error.message, { warn: true });
+      render();
       return;
     }
-    data.pending = (data.pending || []).concat({ behavior_id: id, day: localDay() });
+    data.self = (data.self || []).filter(q => q.day !== localDay()).concat(saved || []);
+    setDraft({});
     render();
-    toast('Sent for approval. Nice work.');
+    RR.burst(30);
+    toast('Report filed. Mom & Dad will add their ratings.');
   }
 
   // ---------------------------------------------------------------- postgame interview
@@ -253,10 +274,23 @@
     // First visit on this device: remember where things stand, no fireworks.
     if (!first || store.get('seen')) {
       const fresh = data.recent.filter(r => r.points > 0 && r.kind !== 'redeem' && !seen.has(r.id));
-      if (fresh.length === 1) {
-        RR.celebrate({ kicker: 'XP earned', title: `+${fresh[0].points} XP`, body: fresh[0].reason });
-      } else if (fresh.length > 1) {
-        RR.celebrate({ kicker: 'XP earned', title: `+${fresh.reduce((a, r) => a + r.points, 0)} XP`, body: `${fresh.length} new highlights. Keep stacking wins.` });
+      const sum = rows => rows.reduce((a, r) => a + r.points, 0);
+      // Mom & Dad rated his day.
+      const ratings = fresh.filter(r => r.kind === 'earn' && r.level);
+      if (ratings.length) {
+        const n = l => ratings.filter(r => r.level === l).length;
+        const parts = [[3, 'All-Star'], [2, 'Strong'], [1, 'Solid']].filter(([l]) => n(l)).map(([l, t]) => `${n(l)} ${t}`);
+        RR.celebrate({ kicker: 'Scouting report', title: `+${sum(ratings)} XP`, medal: n(3) ? 'star' : '', big: n(3) > 0,
+          body: `Mom & Dad rated your day: ${parts.join(' · ')}.` });
+      }
+      // A moment they noticed.
+      fresh.filter(r => r.kind === 'moment').slice(0, 3).forEach(r =>
+        RR.celebrate({ kicker: 'Moment recognized', title: `+${r.points} XP`, medal: 'star', body: r.reason }));
+      const other = fresh.filter(r => !(r.kind === 'earn' && r.level) && r.kind !== 'moment');
+      if (other.length === 1) {
+        RR.celebrate({ kicker: 'XP earned', title: `+${other[0].points} XP`, body: other[0].reason });
+      } else if (other.length > 1) {
+        RR.celebrate({ kicker: 'XP earned', title: `+${sum(other)} XP`, body: `${other.length} new highlights. Keep stacking wins.` });
       }
       if (lastLevel !== null && m.level.idx > Number(lastLevel)) {
         RR.celebrate({ kicker: 'Level up', title: m.level.name, medal: 'shield', big: true,
@@ -284,10 +318,11 @@
 
   RR.wireUI($('#k-app'));
   $('#k-app').addEventListener('click', e => {
-    const t = e.target.closest('[data-go],[data-request],[data-postgame],[data-edit-journal]');
+    const t = e.target.closest('[data-go],[data-self],[data-file],[data-postgame],[data-edit-journal]');
     if (!t) return;
     if (t.dataset.go) goTab(t.dataset.go);
-    else if (t.dataset.request) request(t.dataset.request, t);
+    else if (t.dataset.self) pick(t.dataset.self, +t.dataset.level);
+    else if ('file' in t.dataset) fileReport(t);
     else if ('postgame' in t.dataset) { goTab('clubhouse'); $('#k-q').scrollIntoView({ block: 'start' }); }
     else if ('editJournal' in t.dataset) { jEditing = true; $('#k-j').innerHTML = ''; renderJournal(); }
   });

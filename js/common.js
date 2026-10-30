@@ -157,6 +157,7 @@ const RR = (() => {
     x: '<path d="M6 6l12 12M18 6L6 18"/>',
     message: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    book: '<path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3z"/><path d="M21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z"/>',
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>'
   };
   const icon = (name, cls = '') => `<svg class="ico ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
@@ -240,17 +241,32 @@ const RR = (() => {
     };
   }
 
-  const CATEGORIES = { home: 'Home & School', sports: 'On the Field' };
-  const catOf = b => b.category === 'sports' ? 'sports' : 'home';
+  // The Game Plan: three arenas, each with a few standards that describe how
+  // he shows up. Parents rate each standard daily; he rates himself too.
+  const ARENAS = ['home', 'learning', 'sports'];
+  const CATEGORIES = { home: 'At Home', learning: 'Learning', sports: 'On the Field' };
+  const ARENA_INFO = {
+    home: { icon: 'clubhouse', tag: 'How we show up for our family' },
+    learning: { icon: 'book', tag: 'Homework, reading and a growth mindset' },
+    sports: { icon: 'ball', tag: 'Effort and attitude, not the score' }
+  };
+  const catOf = b => ARENAS.includes(b.category) ? b.category : 'home';
+  // Rating scale. XP = the standard's XP × the level.
+  const RATINGS = [
+    { v: 0, label: 'Not today' },
+    { v: 1, label: 'Solid' },
+    { v: 2, label: 'Strong' },
+    { v: 3, label: 'All-Star' }
+  ];
 
   // Trophy case. Each badge says how close he is.
   const BADGES = [
     { key: 'first', icon: 'ball', name: 'First Pitch', desc: 'Earn your first XP', need: 1, val: m => m.lifetime },
     { key: 'streak3', icon: 'flame', name: 'Hot Streak', desc: '3-day streak', need: 3, val: m => m.bestStreak },
     { key: 'streak7', icon: 'flame', name: 'Iron Man', desc: '7-day streak', need: 7, val: m => m.bestStreak },
-    { key: 'tasks10', icon: 'check', name: 'Double Digits', desc: '10 tasks done', need: 10, val: m => m.tasksCompleted },
-    { key: 'tasks50', icon: 'target', name: 'Grinder', desc: '50 tasks done', need: 50, val: m => m.tasksCompleted },
-    { key: 'field10', icon: 'team', name: 'Team Player', desc: '10 on-field awards', need: 10, val: m => m.sportsCount },
+    { key: 'allstar5', icon: 'star', name: 'All-Star Game', desc: '5 All-Star ratings', need: 5, val: m => m.allstarCount },
+    { key: 'field10', icon: 'team', name: 'Team Player', desc: '10 on-field ratings', need: 10, val: m => m.sportsCount },
+    { key: 'moments5', icon: 'bolt', name: 'Highlight Reel', desc: '5 moments recognized', need: 5, val: m => m.momentCount },
     { key: 'prize1', icon: 'gift', name: 'Closer', desc: 'Redeem a prize', need: 1, val: m => m.redeemedCount },
     { key: 'journal7', icon: 'mic', name: 'Postgame Pro', desc: '7 interviews', need: 7, val: m => m.journalCount }
   ];
@@ -299,15 +315,19 @@ const RR = (() => {
     const weekXP = week.reduce((a, d) => a + box[d].xp, 0);
     const weekTasks = week.reduce((a, d) => a + box[d].tasks, 0);
 
-    const pendingToday = new Set((s.pending || []).filter(p => p.day === today).map(p => p.behavior_id));
-    // Home & School first, then On the Field; numbered like a batting order.
-    const ordered = ['home', 'sports'].flatMap(c => (s.behaviors || []).filter(b => catOf(b) === c));
+    // The Game Plan for today: each standard with your rating, his own rating
+    // and any moments you recognized. Numbered in arena order.
+    const selfToday = (s.self || []).filter(q => q.day === today);
+    const selfBy = new Map(selfToday.map(q => [q.behavior_id, q.level]));
+    const ordered = ARENAS.flatMap(c => (s.behaviors || []).filter(b => catOf(b) === c));
     const lineup = ordered.map((b, i) => {
-      const n = recent.filter(r => r.kind === 'earn' && r.behavior_id === b.id && r.day === today).length;
-      const status = b.once_daily && n > 0 ? 'done' : pendingToday.has(b.id) ? 'pending' : 'open';
-      return { ...b, order: i + 1, cat: catOf(b), n, status };
+      const rating = recent.find(r => r.kind === 'earn' && r.behavior_id === b.id && r.day === today) || null;
+      const level = rating ? (rating.level || Math.max(1, Math.min(3, Math.round(rating.points / Math.max(1, b.points))))) : 0;
+      const moments = recent.filter(r => r.kind === 'moment' && r.behavior_id === b.id && r.day === today);
+      return { ...b, order: i + 1, cat: catOf(b), rating, level, self: selfBy.has(b.id) ? selfBy.get(b.id) : null, moments, status: rating ? 'done' : 'open' };
     });
-    const doneCount = lineup.filter(b => b.status === 'done' || (!b.once_daily && b.n > 0)).length;
+    const doneCount = lineup.filter(b => b.rating).length;
+    const filedAt = selfToday.reduce((a, q) => q.updated_at && q.updated_at > a ? q.updated_at : a, '') || (selfToday.length ? 'yes' : '');
 
     const rewards = (s.rewards || []).slice().sort((a, b) => a.cost - b.cost);
     const nextPrize = rewards.find(r => r.cost > s.balance) || null;
@@ -324,6 +344,9 @@ const RR = (() => {
       tasksCompleted: st ? st.tasks_completed : recent.filter(r => r.kind === 'earn').length,
       redeemedCount: st ? st.redeemed_count : recent.filter(r => r.kind === 'redeem').length,
       sportsCount: st ? st.sports_count : 0,
+      allstarCount: st && st.allstar_count != null ? st.allstar_count : recent.filter(r => r.kind === 'earn' && r.level === 3).length,
+      momentCount: st && st.moment_count != null ? st.moment_count : recent.filter(r => r.kind === 'moment').length,
+      selfCount: selfToday.length, filedAt,
       journalCount: st ? st.journal_count : (s.journal || []).length,
       lineup, doneCount, rewards, nextPrize,
       highlights: recent.filter(gained).slice(0, 5),
@@ -362,7 +385,7 @@ const RR = (() => {
         <div class="bcard-face bcard-back">
           <div class="bb-head"><b>${esc(m.name)}</b><span>${m.jersey ? '#' + esc(m.jersey) : ''}</span></div>
           <div class="bb-bio">${bio}</div>
-          <table class="bb-table"><thead><tr><th></th><th>XP</th><th>TSK</th><th>STK</th><th>PRZ</th></tr></thead>
+          <table class="bb-table"><thead><tr><th></th><th>XP</th><th>MET</th><th>STK</th><th>PRZ</th></tr></thead>
             <tbody><tr><td>Week</td><td>${fmt(m.weekXP)}</td><td>${m.weekTasks}</td><td>${m.streak}</td><td>–</td></tr>
             <tr><td>Career</td><td>${fmt(m.lifetime)}</td><td>${fmt(m.tasksCompleted)}</td><td>${m.bestStreak}</td><td>${m.redeemedCount}</td></tr></tbody></table>
           <div class="bb-note"><b>Scouting report:</b> ${lv.next ? `${fmt(lv.toNext)} XP from ${esc(lv.next.name)}.` : 'Hall of Famer.'} ${earned}/${m.badges.length} trophies.</div>
@@ -435,7 +458,7 @@ const RR = (() => {
   function statGrid(m, full = false) {
     const tiles = [
       statTile('XP this week', fmt(m.weekXP), 'XP', 'bolt'),
-      statTile('Tasks this week', fmt(m.weekTasks), '', 'check'),
+      statTile('Standards met', fmt(m.weekTasks), 'this wk', 'check'),
       statTile('Current streak', m.streak, m.streak === 1 ? 'day' : 'days', 'flame', m.streak >= 3),
       statTile('Prizes redeemed', fmt(m.redeemedCount), '', 'gift')
     ];
@@ -443,32 +466,63 @@ const RR = (() => {
     return `<div class="stats${full ? ' three' : ''}">${tiles.join('')}</div>`;
   }
 
-  // One lineup item as a tile.
-  //   mode 'parent':          the tile is a button that awards XP
-  //   mode 'kid-can-request': an "I did it" button sends it for approval
-  //   mode 'kid':             view only
-  function lineupTile(b, mode, showCat = false) {
-    const canAct = b.status === 'open' && mode === 'kid-can-request';
-    const st = b.status === 'done' ? '<span class="st done">Completed</span>'
-      : b.status === 'pending' ? '<span class="st pending">Pending Approval</span>' : '<span class="st">Available</span>';
-    const freq = b.once_daily ? 'Once a day' : b.n ? `×${b.n} today` : 'Any time';
-    const sub = showCat ? `<span class="${b.cat === 'sports' ? 'field' : ''}">${CATEGORIES[b.cat]}</span><br>${freq}` : freq;
-    const inner = `<span class="tile-top"><span class="lu-no">${b.status === 'done' ? icon('check') : b.order}</span>${st}</span>
-      <span class="tile-name">${esc(b.name)}</span>
-      <span class="tile-bot"><span class="tile-xp">+${b.points}<small>XP</small></span>
-        ${canAct ? `<button class="lu-act" data-request="${b.id}">I did it</button>` : `<span class="tile-sub">${sub}</span>`}</span>`;
-    if (mode === 'parent') return `<button class="tile ${b.status}" data-award="${b.id}" aria-label="Award ${b.points} XP for ${esc(b.name)}">${inner}</button>`;
-    // Player view: XP up top, one big button (or the status) along the bottom.
-    return `<div class="tile kid ${b.status}">
-      <span class="tile-top"><span class="lu-no">${b.status === 'done' ? icon('check') : b.order}</span><span class="tile-xp">+${b.points}<small>XP</small></span></span>
-      <span class="tile-name">${esc(b.name)}${showCat ? `<span class="tile-cat ${b.cat === 'sports' ? 'field' : ''}">${CATEGORIES[b.cat]}</span>` : ''}</span>
-      ${canAct ? `<button class="lu-act wide" data-request="${b.id}">${icon('check')}I did it</button>` : `<span class="tile-foot">${st}<span class="tile-sub">${freq}</span></span>`}
-    </div>`;
+  // ----- Game Plan components
+  const ratingLabel = v => (RATINGS[v] || RATINGS[0]).label;
+  const pill = (v, text) => `<span class="rpill r${v == null ? 'x' : v}">${text}</span>`;
+
+  function arenaHead(cat, extra = '') {
+    return `<div class="arena-head"><span class="arena-ic">${icon(ARENA_INFO[cat].icon)}</span>
+      <div><b>${CATEGORIES[cat]}</b><small>${ARENA_INFO[cat].tag}</small></div>${extra}</div>`;
   }
 
-  const tiles = (items, mode, showCat) => items.length
-    ? `<div class="tiles">${items.map(b => lineupTile(b, mode, showCat)).join('')}</div>`
-    : '<p class="empty">Nothing here.</p>';
+  // One standard. mode 'parent': rate it (and recognize moments).
+  // mode 'kid': rate yourself (draft = his unsent picks), see your parents' rating.
+  function standardCard(b, mode, opts = {}) {
+    const kid = esc(opts.kidName || 'Jaylen');
+    const moments = b.moments.length ? `<ul class="moments">${b.moments.map(r =>
+      `<li>${icon('star', 'sm')}<span>${esc(r.reason)}</span><b>+${r.points}</b></li>`).join('')}</ul>` : '';
+    let compare, buttons;
+    if (mode === 'parent') {
+      compare = b.self == null ? pill(null, `${kid}: not rated yet`) : pill(b.self, `${kid} says: ${ratingLabel(b.self)}`);
+      buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${r.v && b.level === r.v ? ' on' : ''}" data-rate="${b.id}" data-level="${r.v}">
+        ${r.label}${r.v ? `<small>+${b.points * r.v}</small>` : ''}</button>`).join('');
+    } else {
+      const mine = opts.draft && opts.draft[b.id] != null ? opts.draft[b.id] : b.self;
+      compare = b.rating ? pill(b.level, `Mom &amp; Dad: ${ratingLabel(b.level)} · +${b.rating.points} XP`) : pill(null, 'Mom &amp; Dad: not rated yet');
+      buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${mine === r.v ? ' on' : ''}" data-self="${b.id}" data-level="${r.v}">${r.label}</button>`).join('');
+    }
+    return `<article class="std ${b.rating ? 'rated r' + b.level : ''}" data-std="${b.id}">
+      <div class="std-head"><span class="lu-no">${b.order}</span><b class="std-name">${esc(b.name)}</b><span class="std-xp">up to +${b.points * 3}<small>XP</small></span></div>
+      ${b.description ? `<p class="std-desc">${esc(b.description)}</p>` : ''}
+      <div class="std-compare">${compare}</div>
+      ${mode === 'kid' ? '<span class="std-ask">How did you do today?</span>' : ''}
+      <div class="rates">${buttons}</div>
+      ${moments}
+      ${mode === 'parent' ? `<button type="button" class="moment-btn" data-moment="${b.id}">${icon('star', 'sm')}Recognize a moment</button>` : ''}
+    </article>`;
+  }
+
+  // All three arenas with their standards.
+  function gamePlan(m, mode, opts = {}) {
+    if (!m.lineup.length) return '<div class="panel empty">No standards yet.</div>';
+    return ARENAS.map(cat => {
+      const items = m.lineup.filter(b => b.cat === cat);
+      if (!items.length) return '';
+      return `<section class="arena">${arenaHead(cat, `<span class="arena-count">${items.filter(b => b.rating).length}/${items.length}</span>`)}
+        <div class="stds">${items.map(b => standardCard(b, mode, opts)).join('')}</div></section>`;
+    }).join('');
+  }
+
+  // Compact view of today for the Clubhouse: each standard with his rating and yours.
+  function gameSummary(m, kidName = 'Jaylen') {
+    return `<div class="gsum">${ARENAS.map(cat => {
+      const items = m.lineup.filter(b => b.cat === cat);
+      if (!items.length) return '';
+      return `<div class="gsum-arena"><div class="gsum-head">${icon(ARENA_INFO[cat].icon, 'sm')}${CATEGORIES[cat]}</div>
+        ${items.map(b => `<div class="gsum-row"><span class="nm">${esc(b.name)}</span>
+          <span class="who">${b.self == null ? pill(null, esc(kidName) + ' –') : pill(b.self, `${esc(kidName)} ${ratingLabel(b.self)}`)}${b.rating ? pill(b.level, ratingLabel(b.level)) : pill(null, 'Not rated')}</span></div>`).join('')}</div>`;
+    }).join('')}</div>`;
+  }
 
   // Lineup progress as an infield: each quarter of the lineup puts a runner on.
   function diamond(m) {
@@ -484,7 +538,7 @@ const RR = (() => {
         ${base(56, 32, on[0])}${base(32, 8, on[1])}${base(8, 32, on[2])}
         <path d="M26 52 h12 v4 l-6 5 l-6 -5 z" fill="${on[3] ? '#f6c90e' : '#f4f5f7'}"/>
       </svg>
-      <div><b>${call}</b><small>${done} of ${total} done today</small></div></div>`;
+      <div><b>${call}</b><small>${done} of ${total} standards rated today</small></div></div>`;
   }
 
   // The weekly box score, styled like a ballpark scoreboard.
@@ -499,7 +553,7 @@ const RR = (() => {
       <div class="sb-grid">
         <span></span>${m.week.map(d => `<span class="h ${cls(d)}">${shortDay(d).slice(0, 2)}</span>`).join('')}<span class="h">Tot</span>
         ${row('XP', d => m.box[d].xp, fmt(m.weekXP))}
-        ${row('Tasks', d => m.box[d].tasks, m.weekTasks)}
+        ${row('Met', d => m.box[d].tasks, m.weekTasks)}
       </div></div>`;
   }
 
@@ -569,7 +623,8 @@ const RR = (() => {
     : r.kind === 'adjust' ? `<span class="mark">${icon('star', 'sm')}</span>`
     : `<span class="mark">${icon('bolt', 'sm')}</span>`;
   const rowDelta = r => `<span class="delta ${r.kind === 'redeem' ? 'redeem' : r.points > 0 ? 'plus' : 'minus'}">${signed(r.points)}</span>`;
-  const rowLabel = r => r.kind === 'redeem' ? 'Redeemed: ' + r.reason : r.kind === 'adjust' && r.points > 0 ? 'Bonus: ' + r.reason : r.reason;
+  const rowLabel = r => r.kind === 'redeem' ? 'Redeemed: ' + r.reason : r.kind === 'adjust' && r.points > 0 ? 'Bonus: ' + r.reason
+    : r.kind === 'moment' ? 'Moment: ' + r.reason : r.kind === 'earn' && r.level ? `${r.reason} · ${ratingLabel(r.level)}` : r.reason;
 
   function highlights(m) {
     if (!m.highlights.length) return '<p class="empty">Highlights show up here as XP comes in.</p>';
@@ -631,7 +686,8 @@ const RR = (() => {
     client, configured, esc, $, $$, localDay, addDays, weekStart, weekDays, last7, dayLabel, shortDay, timeOf, signed, fmt, pct,
     store, toast, countTo, burst, icon, brandMark,
     MOODS, mood, promptFor, LEVELS, levelFor, CATEGORIES, catOf, model,
-    ui, wireUI, baseballCard, xpHero, xpBar, tabcard, statGrid, lineupTile, tiles, diamond, scoreboard, basepath,
+    ARENAS, ARENA_INFO, RATINGS, ratingLabel,
+    ui, wireUI, baseballCard, xpHero, xpBar, tabcard, statGrid, standardCard, gamePlan, gameSummary, arenaHead, diamond, scoreboard, basepath,
     dcard, ondeckCard, ondeck, lockerItem, highlights, trophyCase, gameLogRows, moodWeek, shot, celebrate
   };
 })();
