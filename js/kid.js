@@ -81,9 +81,9 @@
           <small>${rated ? `Report filed${m.filedAt !== 'yes' ? ' at ' + RR.timeOf(m.filedAt) : ''}. Nice work.` : `How did you show up at home, in learning and on the field? ${m.lineup.length} quick ratings.`}</small></span>
         <span class="step-go">${rated ? 'Edit' : 'Start'}${icon('right', 'sm')}</span></button>` : '';
 
-    $('#k-prize-next').innerHTML = RR.ondeck(m) || (m.rewards.length
-      ? `<div class="panel">${icon('unlock')} Every prize is unlocked. Ask Mom or Dad to redeem one.</div>`
-      : '<div class="panel empty">Prizes are coming soon.</div>');
+    // A few prizes from the locker (the Prizes tab has them all).
+    $('#k-prize-next').innerHTML = m.rewards.slice(0, 4).map(r => RR.lockerItem(r, m.balance, 'kid')).join('')
+      || '<div class="panel empty" style="grid-column:1/-1">Prizes are coming soon.</div>';
 
     // Game Plan: rate yourself, then file your scouting report.
     $('#k-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -102,7 +102,6 @@
 
     // Prize Locker
     $('#k-bal').textContent = fmt(m.balance);
-    $('#k-ondeck').innerHTML = RR.ondeck(m);
     $('#k-locker').innerHTML = m.rewards.map(r => RR.lockerItem(r, m.balance, 'kid')).join('')
       || '<div class="panel empty" style="grid-column:1/-1">The locker is being stocked.</div>';
 

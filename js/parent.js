@@ -267,7 +267,6 @@
 
   function renderLocker(m) {
     $('#p-bal').textContent = fmt(m.balance);
-    $('#p-ondeck').innerHTML = RR.ondeck(m);
     $('#prize-list').innerHTML = m.rewards.length ? m.rewards.map(r => RR.lockerItem(r, m.balance, 'parent')).join('')
       : '<div class="panel empty" style="grid-column:1/-1">The locker is empty. Add a prize.</div>';
     $('#redeemed').innerHTML = state.redeemed.length ? state.redeemed.map(r => `<li><span class="mark redeem">${icon('gift', 'sm')}</span>
