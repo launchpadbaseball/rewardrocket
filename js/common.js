@@ -489,13 +489,13 @@ const RR = (() => {
         ${r.label}${r.v ? `<small>+${b.points * r.v}</small>` : ''}</button>`).join('');
     } else {
       const mine = opts.draft && opts.draft[b.id] != null ? opts.draft[b.id] : b.self;
-      compare = b.rating ? pill(b.level, `Mom &amp; Dad: ${ratingLabel(b.level)}${b.rating.points ? ` · +${b.rating.points} XP` : ''}`) : pill(null, 'Mom &amp; Dad: not rated yet');
+      compare = b.rating ? pill(b.level, `Mom &amp; Dad: ${ratingLabel(b.level)}${b.rating.points ? ` · +${b.rating.points} XP` : ''}`) : '';
       buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${mine === r.v ? ' on' : ''}" data-self="${b.id}" data-level="${r.v}">${r.label}</button>`).join('');
     }
     return `<article class="std ${b.rating ? 'rated r' + b.level : ''}" data-std="${b.id}">
       <div class="std-head"><span class="lu-no">${b.order}</span><b class="std-name">${esc(b.name)}</b><span class="std-xp">up to +${b.points * 3}<small>XP</small></span></div>
       ${b.description ? `<p class="std-desc">${esc(b.description)}</p>` : ''}
-      <div class="std-compare">${compare}</div>
+      ${compare ? `<div class="std-compare">${compare}</div>` : ''}
       ${mode === 'kid' ? '<span class="std-ask">How did you do today?</span>' : ''}
       <div class="rates">${buttons}</div>
       ${moments}

@@ -12,7 +12,7 @@
 
   // ---------------------------------------------------------------- chrome
   $$('.js-mark').forEach(el => { el.outerHTML = RR.brandMark(el.closest('.topbar') ? 'brand-mark' : 'hero-mark'); });
-  [['clubhouse', 'clubhouse', 'Clubhouse'], ['lineup', 'lineup', 'Game Plan'], ['locker', 'locker', 'Prize Locker'], ['stats', 'stats', 'Stats']]
+  [['clubhouse', 'clubhouse', 'Today'], ['lineup', 'lineup', 'Rate Myself'], ['locker', 'locker', 'Prizes']]
     .forEach(([id, ic, text]) => { $('#nav-' + id).innerHTML = icon(ic) + `<span>${text}</span>`; });
 
   function message(title, body) {
@@ -56,45 +56,34 @@
     const draft = getDraft();
     const canRate = Array.isArray(data.self);   // database has the Game Plan
 
-    // Clubhouse
-    $('#k-card').innerHTML = RR.baseballCard(m);
-    $('#k-xp').innerHTML = RR.xpHero(m);
-    const bal = $('#k-xp .js-bal');
+    // Today: who he is, his two daily steps, and the prize he's working toward.
+    const initials = esc(m.name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase());
+    const tag = [m.jersey ? '#' + m.jersey : '', m.position, m.level.name].filter(Boolean).map(esc).join(' · ');
+    $('#k-hero').innerHTML = `<div class="kid-hero">
+        <div class="kh-photo">${m.avatar ? `<img src="${esc(m.avatar)}" alt="">` : initials}</div>
+        <div class="kh-id"><span class="kh-hi">Hi ${esc(m.name)}</span><span class="kh-tag">${tag}</span></div>
+        <div class="kh-xp"><b class="js-bal" data-v="${m.balance}">${fmt(m.balance)}</b><small>XP</small></div>
+      </div>
+      <div class="kh-level"><div class="meter thin"><i style="width:${m.level.pct}%"></i></div>
+        <span>${m.level.next ? `${fmt(m.level.toNext)} XP to ${esc(m.level.next.name)}` : 'Hall of Famer'}</span></div>`;
+    const bal = $('#k-hero .js-bal');
     if (shownBalance !== null && shownBalance !== m.balance) { bal.dataset.v = shownBalance; RR.countTo(bal, m.balance); }
     shownBalance = m.balance;
-    $('#k-bar').innerHTML = RR.xpBar(m);
 
-    // Header: his XP and streak, always in view.
-    $('#k-top').innerHTML = `<span class="hchip">${icon('bolt')}<b>${fmt(m.balance)}</b>XP</span>` +
-      (m.streak ? `<span class="hchip hot">${icon('flame')}<b>${m.streak}</b></span>` : '');
-
-    // Dugout: tonight's scouting report, the latest reply, the next prize.
-    // (Today's question has its own big card above.)
-    const cards = [];
     const answered = (data.journal || []).some(j => j.day === localDay());
-    const needsReport = canRate && !m.filedAt && m.lineup.length > 0;
-    if (needsReport) {
-      cards.push(RR.dcard({ color: 'yellow', kicker: 'Scouting report', ic: 'stats', title: 'Rate your day',
-        body: `How did you show up at home, in learning and on the field? Rate yourself on ${m.lineup.length} standards.`, attrs: 'data-go="lineup"' }));
-    }
-    const reply = (data.journal || []).find(j => j.parent_reply);
-    if (reply) cards.push(RR.dcard({ color: 'peach', kicker: 'From Mom & Dad', ic: 'message', title: 'Coach’s note', body: esc(reply.parent_reply) }));
-    cards.push(RR.ondeckCard(m));
-    const live = (('journal' in data && !answered) ? 1 : 0) + (needsReport ? 1 : 0);
-    // On the Lineup tab, a pointer back to today's question until it's answered.
-    $('#k-lineup-pg').innerHTML = 'journal' in data && !answered
-      ? RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: 'Today’s question is up', body: esc(RR.promptFor(localDay())), attrs: 'data-postgame' }) : '';
-    $('#k-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>to do</small></span></div>
-      <div class="dugout">${cards.join('')}</div>`;
+    const rated = canRate && !!m.filedAt;
+    const steps = (canRate ? 1 : 0) + ('journal' in data ? 1 : 0);
+    const done = (rated ? 1 : 0) + ('journal' in data && answered ? 1 : 0);
+    $('#k-steps-count').innerHTML = steps ? `<span class="rpill ${done === steps ? 'r1' : 'rx'}">${done === steps ? icon('check', 'sm') + 'All done today' : `${done} of ${steps} done`}</span>` : '';
+    $('#k-step-rate').innerHTML = canRate ? `<button class="step${rated ? ' done' : ''}" data-go="lineup">
+        <span class="step-n">${rated ? icon('check') : '1'}</span>
+        <span class="step-body"><b>Rate yourself</b>
+          <small>${rated ? `Report filed${m.filedAt !== 'yes' ? ' at ' + RR.timeOf(m.filedAt) : ''}. Nice work.` : `How did you show up at home, in learning and on the field? ${m.lineup.length} quick ratings.`}</small></span>
+        <span class="step-go">${rated ? 'Edit' : 'Start'}${icon('right', 'sm')}</span></button>` : '';
 
-    // Tabbed card: today's Game Plan (his rating and his parents'), scoreboard, highlights.
-    const planPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm" data-go="lineup">${needsReport ? 'Rate yourself' : 'Game Plan'}</button></div>` +
-      RR.gameSummary(m, 'You');
-    $('#k-tabs').innerHTML = RR.tabcard('club', [
-      { key: 'lineup', label: 'Today’s Game Plan', html: planPane },
-      { key: 'score', label: 'Scoreboard', html: RR.scoreboard(m) + '<div style="margin-top:12px">' + RR.statGrid(m) + '</div>' },
-      { key: 'high', label: 'Highlights', html: RR.highlights(m) }
-    ]);
+    $('#k-prize-next').innerHTML = RR.ondeck(m) || (m.rewards.length
+      ? `<div class="panel">${icon('unlock')} Every prize is unlocked. Ask Mom or Dad to redeem one.</div>`
+      : '<div class="panel empty">Prizes are coming soon.</div>');
 
     // Game Plan: rate yourself, then file your scouting report.
     $('#k-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
@@ -103,7 +92,7 @@
     $('#k-summary').innerHTML = `<div class="report-bar">
         <div><span class="label">Tonight’s scouting report</span><b class="num" style="font-size:28px">${picks}<small style="font-size:15px;color:var(--muted)"> / ${m.lineup.length} rated</small></b></div>
         ${m.filedAt ? `<span class="rpill r1">${icon('check', 'sm')}Filed${m.filedAt !== 'yes' ? ' ' + RR.timeOf(m.filedAt) : ''}</span>` : ''}</div>
-      <p class="muted" style="margin:10px 0 0;font-size:13.5px">This is how we show up. Rate yourself on each standard, honestly. Great players know where they stand. Mom &amp; Dad add their rating, and theirs earns the XP.</p>`;
+      <p class="muted" style="margin:10px 0 0;font-size:13.5px">Tap how you did on each one, honestly. Then file your report.</p>`;
     $('#k-groups').innerHTML = canRate
       ? RR.gamePlan(m, 'kid', { draft }) + (picks && (changed || !m.filedAt)
         ? `<div class="file-bar"><button class="btn block" data-file>${icon('check')}${m.filedAt ? 'Update my report' : `File my scouting report · ${picks}/${m.lineup.length}`}</button></div>`
@@ -117,12 +106,6 @@
     $('#k-locker').innerHTML = m.rewards.map(r => RR.lockerItem(r, m.balance, 'kid')).join('')
       || '<div class="panel empty" style="grid-column:1/-1">The locker is being stocked.</div>';
 
-    // Stats
-    $('#k-box').innerHTML = RR.scoreboard(m);
-    $('#k-season').innerHTML = RR.statGrid(m, true);
-    $('#k-trophies').innerHTML = RR.trophyCase(m);
-    $('#k-ladder').innerHTML = RR.basepath(m);
-    $('#k-log').innerHTML = RR.gameLogRows(m.recent.slice(0, 25));
   }
 
   // ---------------------------------------------------------------- scouting report
@@ -173,7 +156,7 @@
     const earn = data.journal_points > 0 && !journalPaidToday();
     $('#k-q').classList.toggle('done', !!today && !jEditing);
     $('#k-q-head').innerHTML = `${icon('mic', 'oa-mic')}
-      <div class="oa-top"><span class="onair"><i></i>${today && !jEditing ? 'Wrapped' : 'On air'}</span>
+      <div class="oa-top"><span class="step-n sm">${today && !jEditing ? icon('check') : '2'}</span><span class="onair"><i></i>${today && !jEditing ? 'Wrapped' : 'On air'}</span>
         <span class="oa-k">Postgame Interview</span>${earn ? `<span class="oa-xp">+${data.journal_points} XP</span>` : ''}</div>
       <span class="oa-label">Today’s question</span>
       <h2 class="oa-q">${esc(RR.promptFor(localDay()))}</h2>`;

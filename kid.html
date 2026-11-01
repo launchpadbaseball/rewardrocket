@@ -33,71 +33,44 @@
       <header class="topbar">
         <button type="button" class="brand" data-go="clubhouse" aria-label="The Clubhouse: go to the home screen"><span class="js-mark"></span>
           <span><span class="brand-name">The Clubhouse</span><span class="brand-tag">Earn Your Wins</span></span></button>
-        <div class="top-actions" id="k-top"></div>
       </header>
 
-      <!-- CLUBHOUSE -->
+      <!-- TODAY: his two daily steps, then prizes -->
       <section data-tab="clubhouse">
-        <div class="club has-q">
-          <div class="a-card" id="k-card"></div>
-          <div class="a-xp" id="k-xp"></div>
-          <section class="a-q onair-card" id="k-q" aria-label="Postgame Interview" hidden>
-            <div id="k-q-head"></div>
-            <div id="k-j"></div>
-          </section>
-          <div class="a-bar panel" id="k-bar"></div>
-          <div class="a-dugout" id="k-dugout"></div>
-          <div class="a-tabs" id="k-tabs"></div>
-        </div>
+        <div id="k-hero"></div>
+        <div class="steps-head"><h2>Today</h2><span id="k-steps-count"></span></div>
+        <div id="k-step-rate"></div>
+        <section class="onair-card step-q" id="k-q" aria-label="Step 2: answer today's question" hidden>
+          <div id="k-q-head"></div>
+          <div id="k-j"></div>
+        </section>
+        <div class="sec"><h2>Prizes</h2><button class="link" data-go="locker">See all</button></div>
+        <div id="k-prize-next"></div>
       </section>
 
-      <!-- LINEUP -->
+      <!-- RATE MYSELF -->
       <section data-tab="lineup" hidden>
-        <h1 class="page-title">Game Plan</h1>
+        <h1 class="page-title">Rate Myself</h1>
         <div class="page-sub" id="k-date"></div>
         <div class="panel" id="k-summary" style="margin-bottom:14px"></div>
         <div id="k-groups"></div>
-        <div id="k-lineup-pg" style="margin-top:14px"></div>
       </section>
 
-      <!-- PRIZE LOCKER -->
+      <!-- PRIZES -->
       <section data-tab="locker" hidden>
-        <h1 class="page-title">Prize Locker</h1>
-        <div class="page-sub">Unlock gear and prizes with XP</div>
-        <div style="margin-bottom:14px"><span class="bal-chip">Balance <b id="k-bal">0</b> XP</span></div>
+        <h1 class="page-title">Prizes</h1>
+        <div class="page-sub">What your XP can unlock</div>
+        <div style="margin-bottom:14px"><span class="bal-chip">You have <b id="k-bal">0</b> XP</span></div>
         <div id="k-ondeck" style="margin-bottom:14px"></div>
         <div class="locker" id="k-locker"></div>
-      </section>
-
-      <!-- STATS -->
-      <section data-tab="stats" hidden>
-        <h1 class="page-title">Stats</h1>
-        <div class="page-sub">Season to date</div>
-        <div class="bento">
-          <div class="wide" id="k-box"></div>
-          <div id="k-season"></div>
-          <div>
-            <div class="sec" style="margin-top:0"><h2>Road to the Hall</h2></div>
-            <div id="k-ladder"></div>
-          </div>
-          <div class="wide">
-            <div class="sec" style="margin-top:4px"><h2>Trophy Case</h2></div>
-            <div id="k-trophies"></div>
-          </div>
-          <div class="wide">
-            <div class="sec" style="margin-top:4px"><h2>Game Log</h2><span class="sub">Last 2 weeks</span></div>
-            <div class="panel" id="k-log"></div>
-          </div>
-        </div>
       </section>
     </div>
 
     <nav class="nav" aria-label="Main">
-      <div class="in">
+      <div class="in three">
         <button data-go="clubhouse" class="on" id="nav-clubhouse"></button>
         <button data-go="lineup" id="nav-lineup"></button>
         <button data-go="locker" id="nav-locker"></button>
-        <button data-go="stats" id="nav-stats"></button>
       </div>
     </nav>
   </main>

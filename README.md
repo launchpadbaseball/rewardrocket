@@ -8,7 +8,7 @@ A player-development app for Jaylen. Mom and Dad each sign in on their own phone
 - **Clubhouse:** a dashboard.
   - **Baseball card:** his personalized card. Tap it to flip to the stat sheet on the back.
   - **XP and levels:** his XP balance and level, plus a bar showing XP spent, his balance and how far he is from the next level.
-  - **Dugout:** his scouting report when he files it, new postgame interviews, the next prize and quick Bonus XP.
+  - **Postgame Interview:** today's question and his answer as soon as he sends it, with Reply.
   - **Tabbed card:** Today's Game Plan (his rating and yours for every standard, with an infield diamond that fills its bases), Scoreboard and Highlights.
 - **Game Plan:** rate each standard for the day, and recognize standout moments. Bonus XP lives here too.
 - **Prize Locker:** add prizes with product photos, set XP costs and redeem.
@@ -16,7 +16,10 @@ A player-development app for Jaylen. Mom and Dad each sign in on their own phone
 - **Front Office** (gear icon): player card (photo, name, jersey #, position), the Game Plan standards and their XP, postgame XP, notifications, his dashboard link and your account.
 
 **Player dashboard** (`kid.html#…`)
-- The same four tabs, built for him: player card, the Game Plan, stats, Prize Locker, Trophy Case.
+- Kept simple, with three tabs:
+  - **Today:** his two daily steps (① Rate yourself, ② Answer today's question) and the prize he's working toward.
+  - **Rate Myself:** each standard with four buttons, then **File my scouting report**.
+  - **Prizes:** everything in the locker and how close he is.
 - **Scouting report:** each evening he rates himself on every standard and files it. You see his rating next to yours. **Your rating earns the XP; his never does.**
 - **Postgame Interview:** a new question each day. He picks how he's feeling and writes an answer. Answering earns XP (+2 by default), once a day.
 - **Celebrations** for XP earned, level-ups, unlocked prizes and your replies.
@@ -162,7 +165,7 @@ The key is stored in a private part of the database that the website can't read.
 | Fix a mistake | **Stats → Game Log** → trash icon next to the entry |
 | Edit standards / XP | gear → **Game Plan Standards** (or **Game Plan → Edit standards**) |
 | Add a prize with a photo | **Prize Locker → Add prize → Choose photo** (edit one with the pencil) |
-| Read and reply to his answers | **Stats → Postgame Interviews → Reply** (a new one also shows on the Clubhouse) |
+| Read and reply to his answers | **Clubhouse** → Postgame Interview card → **Reply** (older ones: **All interviews**) |
 | Jersey #, position, photo | gear → **Player Card** |
 
 **One rating per standard per day:** changing a rating replaces it rather than adding more XP. The database enforces this, so it holds even if both of you tap at the same moment.

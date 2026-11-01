@@ -128,7 +128,7 @@ button.brand:active { opacity: .8; }
 .club.has-q { grid-template-areas: "card xp" "q q" "bar bar" "dugout dugout" "tabs tabs"; }
 .a-q { grid-area: q; min-width: 0; }
 @media (min-width: 900px) {
-  .club.has-q { grid-template-areas: "card xp dugout" "card q dugout" "card bar dugout" "card tabs dugout" "card . dugout"; grid-template-rows: auto auto auto auto 1fr; }
+  .club.has-q { grid-template-columns: 300px minmax(0, 1fr); grid-template-areas: "card xp" "card q" "card bar" "card tabs" "card ."; grid-template-rows: auto auto auto auto 1fr; }
 }
 @media (min-width: 900px) {
   .wrap { max-width: 1180px; padding-left: 28px; padding-right: 28px; }
@@ -669,3 +669,40 @@ textarea.input { resize: vertical; min-height: 96px; line-height: 1.45; }
 .filed-note { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: rgba(134, 239, 172, .08); border: 1px solid rgba(134, 239, 172, .3); color: #86efac; font-size: 13.5px; font-weight: 600; }
 .oa-last { margin-top: 4px; padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, .25); }
 .oa-last p { margin: 4px 0 0; color: var(--text-2); font-size: 14px; overflow-wrap: anywhere; }
+
+/* ---------- Player view: Today ---------- */
+.nav .in.three { grid-template-columns: repeat(3, 1fr); }
+@media (min-width: 900px) { .wrap:has(.kid-hero) { max-width: 720px; } }
+.kid-hero { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 22px; border: 1px solid rgba(246, 201, 14, .35);
+  background: linear-gradient(160deg, rgba(246, 201, 14, .14), transparent 45%), linear-gradient(180deg, #1c1f25, #121418); }
+.kh-photo { width: 64px; height: 64px; border-radius: 50%; overflow: hidden; flex: none; border: 3px solid var(--gold); display: flex; align-items: center; justify-content: center;
+  background: var(--panel-3); font-family: var(--display); font-weight: 800; font-size: 26px; color: var(--gold); }
+.kh-photo img { width: 100%; height: 100%; object-fit: cover; }
+.kh-id { flex: 1; min-width: 0; }
+.kh-hi { display: block; font-family: var(--display); font-weight: 800; font-size: 28px; line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; }
+.kh-tag { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--gold); }
+.kh-xp { text-align: right; }
+.kh-xp b { display: block; font-family: var(--display); font-weight: 800; font-size: 40px; line-height: .9; }
+.kh-xp small { font-family: var(--display); font-weight: 800; font-size: 13px; letter-spacing: .12em; color: var(--gold); }
+.kh-level { display: flex; align-items: center; gap: 10px; margin: 10px 4px 0; }
+.kh-level .meter { flex: 1; }
+.kh-level span { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.steps-head { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 10px; }
+.steps-head h2 { margin: 0; font-family: var(--display); font-weight: 800; font-size: 26px; letter-spacing: .06em; text-transform: uppercase; }
+.rpill.rx { background: var(--gold-soft); color: var(--gold); }
+.step { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 16px; border-radius: 20px; margin-bottom: 12px;
+  background: linear-gradient(160deg, rgba(246, 201, 14, .16), var(--panel) 60%); border: 1px solid rgba(246, 201, 14, .5); }
+.step:active { transform: scale(.99); }
+.step.done { background: linear-gradient(160deg, rgba(43, 212, 122, .12), var(--panel) 60%); border-color: rgba(43, 212, 122, .4); }
+.step-n { width: 40px; height: 40px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; background: var(--gold); color: var(--gold-ink);
+  font-family: var(--display); font-weight: 800; font-size: 22px; }
+.step-n .ico { width: 20px; height: 20px; stroke-width: 3; }
+.step.done .step-n, .onair-card.done .step-n { background: var(--green); color: #04220f; }
+.step-n.sm { width: 28px; height: 28px; font-size: 16px; }
+.step-n.sm .ico { width: 15px; height: 15px; }
+.step-body { flex: 1; min-width: 0; }
+.step-body b { display: block; font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1; text-transform: uppercase; }
+.step-body small { display: block; margin-top: 5px; color: var(--text-2); font-size: 13.5px; line-height: 1.35; }
+.step-go { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); white-space: nowrap; }
+.step.done .step-go { color: var(--muted); }
+.step-q { margin-bottom: 4px; }

@@ -239,24 +239,14 @@
     if (shownBalance !== null && shownBalance !== m.balance) { bal.dataset.v = shownBalance; RR.countTo(bal, m.balance); }
     $('#c-bar').innerHTML = RR.xpBar(m);
 
-    // Dugout: his scouting report (your turn to rate), a new postgame interview, the next prize.
-    const cards = [];
     const left = m.lineup.length - m.doneCount;
     const reportWaiting = !!m.filedAt && left > 0;
-    if (reportWaiting) {
-      cards.push(RR.dcard({ color: 'yellow', kicker: 'Scouting report', ic: 'stats', title: `${kidName()} filed his report`,
-        body: `He rated himself on ${m.selfCount} standard${m.selfCount === 1 ? '' : 's'}. Your turn: ${left} left to rate.`,
-        acts: `<button class="btn sm ink" data-go="lineup">Rate today</button>` }));
-    }
-    cards.push(RR.ondeckCard(m));
-    cards.push(RR.dcard({ kicker: 'Quick add', ic: 'plus', title: 'Bonus XP', body: 'Reward extra effort with a reason.', attrs: 'data-bonus' }));
-    const live = reportWaiting ? 1 : 0;
     renderInterview();
-    $('#c-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>new</small></span></div>
-      <div class="dugout">${cards.join('')}</div>`;
 
     // Tabbed card: today's Game Plan (his rating and yours), scoreboard, highlights.
     const planPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm" data-go="lineup">${left ? 'Rate today' : 'Game Plan'}</button></div>` +
+      (reportWaiting ? `<button class="alert" data-go="lineup" style="margin:0 0 12px">${icon('stats')}<span class="grow"><b>${esc(kidName())} filed his scouting report</b>
+        <small>Your turn: ${left} standard${left === 1 ? '' : 's'} left to rate.</small></span>${icon('right', 'sm')}</button>` : '') +
       RR.gameSummary(m, kidName());
     $('#c-tabs').innerHTML = RR.tabcard('club', [
       { key: 'lineup', label: 'Today’s Game Plan', html: planPane },
