@@ -248,14 +248,10 @@
         body: `He rated himself on ${m.selfCount} standard${m.selfCount === 1 ? '' : 's'}. Your turn: ${left} left to rate.`,
         acts: `<button class="btn sm ink" data-go="lineup">Rate today</button>` }));
     }
-    if (journalUnread()) {
-      const j = state.journal[0], md = RR.mood(j.mood);
-      cards.push(RR.dcard({ color: 'lav', kicker: 'Postgame interview', ic: 'mic', title: `Feeling ${md.label.toLowerCase()} ${md.emoji}`,
-        body: esc(j.body ? (j.body.length > 90 ? j.body.slice(0, 90) + '…' : j.body) : 'Just a mood today.'), attrs: 'data-open-journal' }));
-    }
     cards.push(RR.ondeckCard(m));
     cards.push(RR.dcard({ kicker: 'Quick add', ic: 'plus', title: 'Bonus XP', body: 'Reward extra effort with a reason.', attrs: 'data-bonus' }));
-    const live = (reportWaiting ? 1 : 0) + (journalUnread() ? 1 : 0);
+    const live = reportWaiting ? 1 : 0;
+    renderInterview();
     $('#c-dugout').innerHTML = `<div class="dug-head"><h2>Dugout</h2><span class="count">${live}<small>new</small></span></div>
       <div class="dugout">${cards.join('')}</div>`;
 
@@ -612,6 +608,41 @@
     }).join('') : `<div class="panel empty">When ${esc(kidName())} answers his postgame question, it shows up here.</div>`;
   }
 
+  // Today's Postgame Interview on the Clubhouse: the question, and his
+  // answer as soon as he sends it (with Reply), so you never have to go looking.
+  function renderInterview() {
+    const box = $('#c-q');
+    box.hidden = state.journalMissing;
+    if (state.journalMissing) return;
+    const today = localDay();
+    const j = state.journal.find(x => x.day === today);
+    const last = state.journal.find(x => x.day !== today);
+    const question = (j && j.prompt) || RR.promptFor(today);
+    box.classList.toggle('done', !!j);
+    let body;
+    if (j) {
+      const md = RR.mood(j.mood);
+      body = `<div class="pg-head"><span class="m">${md.emoji}</span><div><b>Feeling ${esc(md.label.toLowerCase())}</b>
+          <small>${icon('check', 'sm')} Answered ${RR.timeOf(j.updated_at)}</small></div></div>
+        ${j.body ? `<div class="pg-text">“${esc(j.body)}”</div>` : '<p class="oa-note">Just a mood today, no words.</p>'}
+        ${j.parent_reply ? `<div class="pg-reply"><span class="label">${esc((j.replied_by || 'You').split('@')[0])} replied</span><p>${esc(j.parent_reply)}</p></div>` : ''}
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn sm ${j.parent_reply ? 'dark' : ''}" data-reply="${j.id}">${icon(j.parent_reply ? 'edit' : 'message')}${j.parent_reply ? 'Edit reply' : 'Reply'}</button>
+          <button class="btn sm ghost" data-open-journal>All interviews</button></div>`;
+    } else {
+      body = `<p class="oa-note">Waiting for ${esc(kidName())}’s answer. You’ll get a notification when it comes in.</p>
+        ${last ? `<div class="oa-last"><span class="label">Last answer · ${RR.dayLabel(last.day)}</span>
+          <p>${RR.mood(last.mood).emoji} ${last.body ? '“' + esc(last.body) + '”' : 'Just a mood, no words.'}</p></div>` : ''}
+        <button class="btn sm ghost" data-open-journal style="margin-top:10px">All interviews</button>`;
+    }
+    box.innerHTML = `${icon('mic', 'oa-mic')}
+      <div class="oa-top"><span class="onair"><i></i>${j ? 'Answered' : 'On air'}</span><span class="oa-k">Postgame Interview</span></div>
+      <span class="oa-label">Today’s question</span>
+      <h2 class="oa-q">${esc(question)}</h2>${body}`;
+    // Seeing it here counts as reading it.
+    if (j && state.tab === 'clubhouse' && state.journal[0] === j) markJournalSeen();
+  }
+
   function replySheet(id) {
     const j = state.journal.find(x => x.id === id);
     const s = sheet(`<h3>Reply to ${esc(kidName())}</h3>
@@ -888,6 +919,7 @@
     $$('[data-tab]').forEach(sec => { sec.hidden = sec.dataset.tab !== name; });
     window.scrollTo({ top: 0 });
     if (name === 'stats') renderJournal();
+    if (name === 'clubhouse' && started) { renderInterview(); $('#stats-dot').hidden = !journalUnread(); }
   }
 
   $('#btn-manage').addEventListener('click', () => goTab('manage'));
