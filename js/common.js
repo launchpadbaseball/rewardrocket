@@ -322,7 +322,8 @@ const RR = (() => {
     const ordered = ARENAS.flatMap(c => (s.behaviors || []).filter(b => catOf(b) === c));
     const lineup = ordered.map((b, i) => {
       const rating = recent.find(r => r.kind === 'earn' && r.behavior_id === b.id && r.day === today) || null;
-      const level = rating ? (rating.level || Math.max(1, Math.min(3, Math.round(rating.points / Math.max(1, b.points))))) : 0;
+      const level = !rating ? 0 : rating.level != null ? rating.level
+        : rating.points === 0 ? 0 : Math.max(1, Math.min(3, Math.round(rating.points / Math.max(1, b.points))));
       const moments = recent.filter(r => r.kind === 'moment' && r.behavior_id === b.id && r.day === today);
       return { ...b, order: i + 1, cat: catOf(b), rating, level, self: selfBy.has(b.id) ? selfBy.get(b.id) : null, moments, status: rating ? 'done' : 'open' };
     });
@@ -484,11 +485,11 @@ const RR = (() => {
     let compare, buttons;
     if (mode === 'parent') {
       compare = b.self == null ? pill(null, `${kid}: not rated yet`) : pill(b.self, `${kid} says: ${ratingLabel(b.self)}`);
-      buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${r.v && b.level === r.v ? ' on' : ''}" data-rate="${b.id}" data-level="${r.v}">
+      buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${b.rating && b.level === r.v ? ' on' : ''}" data-rate="${b.id}" data-level="${r.v}" aria-pressed="${!!b.rating && b.level === r.v}">
         ${r.label}${r.v ? `<small>+${b.points * r.v}</small>` : ''}</button>`).join('');
     } else {
       const mine = opts.draft && opts.draft[b.id] != null ? opts.draft[b.id] : b.self;
-      compare = b.rating ? pill(b.level, `Mom &amp; Dad: ${ratingLabel(b.level)} · +${b.rating.points} XP`) : pill(null, 'Mom &amp; Dad: not rated yet');
+      compare = b.rating ? pill(b.level, `Mom &amp; Dad: ${ratingLabel(b.level)}${b.rating.points ? ` · +${b.rating.points} XP` : ''}`) : pill(null, 'Mom &amp; Dad: not rated yet');
       buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${mine === r.v ? ' on' : ''}" data-self="${b.id}" data-level="${r.v}">${r.label}</button>`).join('');
     }
     return `<article class="std ${b.rating ? 'rated r' + b.level : ''}" data-std="${b.id}">
@@ -639,6 +640,7 @@ const RR = (() => {
   }
 
   function gameLogRows(rows, opts = {}) {
+    rows = rows.filter(r => r.points !== 0);   // "Not today" ratings carry no XP
     if (!rows.length) return '<p class="empty">No games logged yet.</p>';
     let html = '', day = null;
     for (const r of rows) {

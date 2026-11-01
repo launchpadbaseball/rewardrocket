@@ -305,39 +305,55 @@
   const busy = new Set();
   const todaysRating = id => state.ledger.find(r => r.kind === 'earn' && r.behavior_id === id && r.day === localDay());
 
-  // Set today's rating for a standard (0 clears it). One rating per standard
+  const levelOf = (row, b) => row.level != null ? row.level
+    : row.points === 0 ? 0 : Math.max(1, Math.min(3, Math.round(row.points / Math.max(1, b.points))));
+
+  // A tap on a rating button. Tapping the rating that's already selected clears it.
+  function rate(id, tapped) {
+    const b = state.behaviors.find(x => x.id === id);
+    const row = b && todaysRating(id);
+    const prev = row ? levelOf(row, b) : null;
+    return setRating(id, tapped === prev ? null : tapped);
+  }
+
+  // Set today's rating for a standard: 0 = Not today (rated, no XP),
+  // 1-3 = Solid / Strong / All-Star, null = not rated. One rating per standard
   // per day; the database enforces that even if both parents tap at once.
-  async function rate(id, level, quiet = false) {
+  async function setRating(id, level, quiet = false) {
     const b = state.behaviors.find(x => x.id === id);
     if (!b || busy.has(id)) return;
     const row = todaysRating(id);
-    const prev = row ? (row.level || Math.max(1, Math.min(3, Math.round(row.points / Math.max(1, b.points))))) : 0;
+    const prev = row ? levelOf(row, b) : null;
     if (prev === level) return;
     busy.add(id);
     const before = model();
+    const pts = level ? b.points * level : 0;
     // (Before add-gameplan.sql there's no level column; the level is then read from the XP.)
     const lv = state.gameMissing ? {} : { level };
-    const res = level === 0 ? await db.from('ledger').delete().eq('id', row.id)
-      : row ? await db.from('ledger').update({ points: b.points * level, ...lv }).eq('id', row.id).select().single()
-      : await db.from('ledger').insert({ day: localDay(), kind: 'earn', points: b.points * level, ...lv, reason: b.name, emoji: b.emoji, behavior_id: b.id, once_daily: true }).select().single();
+    const res = level === null ? await db.from('ledger').delete().eq('id', row.id)
+      : row ? await db.from('ledger').update({ points: pts, ...lv }).eq('id', row.id).select().single()
+      : await db.from('ledger').insert({ day: localDay(), kind: 'earn', points: pts, ...lv, reason: b.name, emoji: b.emoji, behavior_id: b.id, once_daily: true }).select().single();
     busy.delete(id);
     if (res.error) {
       const clash = res.error.code === '23505';
-      toast(clash ? `${b.name}: the other parent just rated it. Showing their rating.` : friendly(res.error), { warn: !clash });
+      const needsFix = level === 0 && res.error.code === '23514';
+      toast(clash ? `${b.name}: the other parent just rated it. Showing their rating.`
+        : needsFix ? 'To save “Not today”, run supabase/fix-not-today.sql in Supabase (one time).' : friendly(res.error), { warn: !clash, ms: needsFix ? 7000 : undefined });
       loadAll();
       return;
     }
     // Show it right away; the reload that follows confirms it.
-    const delta = (level ? b.points * level : 0) - (row ? row.points : 0);
+    const delta = pts - (row ? row.points : 0);
     state.ledger = state.ledger.filter(r => r !== row);
-    if (level) state.ledger.unshift(res.data);
+    if (level !== null) state.ledger.unshift(res.data);
     state.balance += delta;
     if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + delta,
-      tasks_completed: state.stats.tasks_completed + (row ? 0 : 1) - (level ? 0 : 1) };
+      tasks_completed: state.stats.tasks_completed + (pts > 0 ? 1 : 0) - (row && row.points > 0 ? 1 : 0) };
     render();
     if (quiet) return;
-    const msg = level ? `${b.name}: ${RR.ratingLabel(level)} · ${delta >= 0 ? '+' : '−'}${Math.abs(delta)} XP` : `${b.name}: rating cleared`;
-    announce(before, model(), msg, async () => { await rate(id, prev, true); toast('Undone'); });
+    const xp = delta ? ` · ${delta > 0 ? '+' : '−'}${Math.abs(delta)} XP` : '';
+    const msg = level === null ? `${b.name}: rating cleared${xp}` : `${b.name}: ${RR.ratingLabel(level)}${xp}`;
+    announce(before, model(), msg, async () => { await setRating(id, prev, true); toast('Undone'); });
   }
 
   // Recognize a standout moment, with a note about what he did.

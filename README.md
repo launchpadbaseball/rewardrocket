@@ -30,7 +30,7 @@ A player-development app for Jaylen. Mom and Dad each sign in on their own phone
   - **At Home:** Own Your Responsibilities, and Respect & Kindness.
   - **Learning:** Homework & Study Habits, and Learner's Mindset.
   - **On the Field:** Compete Every Rep, Great Teammate, and Coachable.
-- **Daily ratings:** you rate each standard once a day. **Solid / Strong / All-Star** earn 1× / 2× / 3× its XP (+2 / +4 / +6 by default). **Not today** earns nothing.
+- **Daily ratings:** you rate each standard once a day. **Solid / Strong / All-Star** earn 1× / 2× / 3× its XP (+2 / +4 / +6 by default). **Not today** counts as rated but earns nothing. Tap a selected rating again to clear it.
 - **Moments:** **Recognize a moment** adds XP with a note about what he did, such as "helped his sister without being asked".
 - **Editing:** edit the standards, their descriptions and their XP in the Front Office.
 
@@ -50,6 +50,7 @@ Already using the app? Run each file below that you haven't run yet in Supabase 
 | `supabase/add-clubhouse.sql` | **The Clubhouse redesign:** jersey # and position, check-in approvals, and lifetime-XP levels and stats |
 | `supabase/add-notifications.sql` | **Notifications:** the bell, pop-ups, and email when Jaylen does something |
 | `supabase/add-gameplan.sql` | **The Game Plan:** swaps the old task list for the 7 standards, daily ratings, moments and his scouting report (run after add-notifications.sql) |
+| `supabase/fix-not-today.sql` | lets you rate a standard **Not today** (rated for the day, 0 XP) |
 
 New installs only need `setup.sql`.
 
