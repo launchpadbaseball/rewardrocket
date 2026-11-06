@@ -706,3 +706,5 @@ textarea.input { resize: vertical; min-height: 96px; line-height: 1.45; }
 .step-go { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); white-space: nowrap; }
 .step.done .step-go { color: var(--muted); }
 .step-q { margin-bottom: 4px; }
+.moments li small { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.step-body small .due { display: inline; font-size: inherit; font-family: var(--body); text-transform: none; color: var(--gold); }

@@ -17,10 +17,10 @@ A player-development app for Jaylen. Mom and Dad each sign in on their own phone
 
 **Player dashboard** (`kid.html#…`)
 - Kept simple, with three tabs:
-  - **Today:** his two daily steps (① Rate yourself, ② Answer today's question) and the prize he's working toward.
-  - **Rate Myself:** each standard with four buttons, then **File my scouting report**.
+  - **Today:** ① today's question (daily), ② his weekly scouting report (due Sunday), this week's shout-outs, and prizes.
+  - **Rate Myself:** each standard with four buttons for the week, then **File my weekly report**.
   - **Prizes:** everything in the locker and how close he is.
-- **Scouting report:** each evening he rates himself on every standard and files it. You see his rating next to yours. **Your rating earns the XP; his never does.**
+- **Weekly scouting report:** before Sunday he rates his week on every standard and files it. You see his rating next to yours in the Sunday review. **Your rating earns the XP; his never does.**
 - **Postgame Interview:** a new question each day. He picks how he's feeling and writes an answer. Answering earns XP (+2 by default), once a day.
 - **Celebrations** for XP earned, level-ups, unlocked prizes and your replies.
 - **Limits:** he can't award XP, redeem prizes or change anything else.
@@ -33,8 +33,12 @@ A player-development app for Jaylen. Mom and Dad each sign in on their own phone
   - **At Home:** Own Your Responsibilities, and Respect & Kindness.
   - **Learning:** Homework & Study Habits, and Learner's Mindset.
   - **On the Field:** Compete Every Rep, Great Teammate, and Coachable.
-- **Daily ratings:** you rate each standard once a day. **Solid / Strong / All-Star** earn 1× / 2× / 3× its XP (+2 / +4 / +6 by default). **Not today** counts as rated but earns nothing. Tap a selected rating again to clear it.
-- **Moments:** **Recognize a moment** adds XP with a note about what he did, such as "helped his sister without being asked".
+- **XP is weekly.** The week runs Monday to Sunday. On **Sunday** you review the week: rate each standard **Solid / Strong / All-Star** (1× / 2× / 3× its XP, +5 / +10 / +15 by default) or **Not this week**, then tap **Award this week's XP**.
+  - Until you tap Award, your picks are only a draft.
+  - Changing a rating afterwards and tapping **Update awards** replaces it.
+  - Missed Sunday? Last week's review stays open through Tuesday.
+- **Shout-outs any time:** **Give a shout-out** on a standard, with a note about what he did. He sees it right away. There's no XP, but it shows up in the Sunday review to help you rate.
+- **The daily question** stays daily and earns no XP. A **weekly bonus** can be added in the review.
 - **Editing:** edit the standards, their descriptions and their XP in the Front Office.
 
 **How it's built:** plain HTML, CSS and JavaScript with no build step. **Supabase** (free tier) provides the database, logins, photo storage and live sync. **Netlify** (free tier) hosts the site.
@@ -54,6 +58,7 @@ Already using the app? Run each file below that you haven't run yet in Supabase 
 | `supabase/add-notifications.sql` | **Notifications:** the bell, pop-ups, and email when Jaylen does something |
 | `supabase/add-gameplan.sql` | **The Game Plan:** swaps the old task list for the 7 standards, daily ratings, moments and his scouting report (run after add-notifications.sql) |
 | `supabase/fix-not-today.sql` | lets you rate a standard **Not today** (rated for the day, 0 XP) |
+| `supabase/add-weekly.sql` | **Weekly points:** the Sunday review, his weekly report, shout-outs; sets standards to +5 per level and turns off daily-question XP (first run only) |
 
 New installs only need `setup.sql`.
 
@@ -157,10 +162,10 @@ The key is stored in a private part of the database that the website can't read.
 
 | You want to… | Do this |
 |---|---|
-| Rate his day | **Game Plan** → tap Solid, Strong or All-Star on each standard (tap again to change; **Not today** clears it). Mis-tapped? **Undo** in the pop-up. |
-| Recognize a moment | **Game Plan** → **Recognize a moment** on the standard → what he did → XP |
-| See how he rated himself | **Game Plan** (his rating is on each standard) or the Clubhouse → **Today's Game Plan** |
-| Give bonus XP | **Game Plan** → **Bonus XP** → amount → reason |
+| Sunday review | **Game Plan** → pick a rating on each standard → **Award this week's XP** |
+| Give a shout-out (no XP) | **Game Plan** → **Give a shout-out** on the standard → what he did |
+| See how he rated his week | **Game Plan** (his rating is on each standard) or the Clubhouse → **This Week** |
+| Weekly bonus | **Game Plan** → **Weekly bonus** → amount → reason |
 | Redeem a prize | **Prize Locker** → **Redeem** (only lit up once he has enough XP) |
 | Fix a mistake | **Stats → Game Log** → trash icon next to the entry |
 | Edit standards / XP | gear → **Game Plan Standards** (or **Game Plan → Edit standards**) |
@@ -168,11 +173,11 @@ The key is stored in a private part of the database that the website can't read.
 | Read and reply to his answers | **Clubhouse** → Postgame Interview card → **Reply** (older ones: **All interviews**) |
 | Jersey #, position, photo | gear → **Player Card** |
 
-**One rating per standard per day:** changing a rating replaces it rather than adding more XP. The database enforces this, so it holds even if both of you tap at the same moment.
+**One rating per standard per week:** updating a rating replaces it rather than adding more XP. The database enforces this, so it holds even if both of you award at the same moment.
 
 **Sync:** changes show up on the other parent's phone within a second or two (the **● Live** dot shows the connection). His dashboard refreshes every 15 seconds.
 
-**Weeks** run Sunday to Saturday.
+**Weeks** run Monday to Sunday; Sunday is review day.
 
 ---
 

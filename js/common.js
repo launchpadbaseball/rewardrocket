@@ -35,14 +35,17 @@ const RR = (() => {
   };
   const addDays = (ymd, n) => { const [Y, M, D] = ymd.split('-').map(Number); return localDay(new Date(Y, M - 1, D + n)); };
 
-  // Midnight at the start of this week (weeks start on Sunday).
+  // Midnight at the start of this week. Weeks run Monday to Sunday, so
+  // Sunday (review day) ends the week.
   const weekStart = (d = new Date()) => {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);
-    x.setDate(x.getDate() - x.getDay());
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
     return x;
   };
-  // This week, Sunday to Saturday, as YYYY-MM-DD.
+  // The week's key: its Sunday, as YYYY-MM-DD. Weekly ratings are stored on it.
+  const weekKey = (d = new Date()) => addDays(localDay(weekStart(d)), 6);
+  // This week, Monday to Sunday, as YYYY-MM-DD.
   const weekDays = () => { const s = localDay(weekStart()); return [0, 1, 2, 3, 4, 5, 6].map(i => addDays(s, i)); };
   // The last 7 days ending today, oldest first.
   const last7 = () => [6, 5, 4, 3, 2, 1, 0].map(i => addDays(localDay(), -i));
@@ -253,7 +256,7 @@ const RR = (() => {
   const catOf = b => ARENAS.includes(b.category) ? b.category : 'home';
   // Rating scale. XP = the standard's XP × the level.
   const RATINGS = [
-    { v: 0, label: 'Not today' },
+    { v: 0, label: 'Not this week' },
     { v: 1, label: 'Solid' },
     { v: 2, label: 'Strong' },
     { v: 3, label: 'All-Star' }
@@ -300,7 +303,8 @@ const RR = (() => {
     const st = s.stats || null;
 
     const lifetime = st ? st.lifetime_xp : recent.filter(gained).reduce((a, r) => a + r.points, 0);
-    const activeDays = st ? st.active_days : [...new Set(recent.filter(gained).map(r => r.day))];
+    // Streaks count days he answered his daily question (XP only lands on Sundays).
+    const activeDays = st ? st.active_days : [...new Set((s.journal || []).map(j => j.day))];
     const { cur: streak, best: bestStreak } = streaks(activeDays);
 
     const week = weekDays();
@@ -315,20 +319,31 @@ const RR = (() => {
     const weekXP = week.reduce((a, d) => a + box[d].xp, 0);
     const weekTasks = week.reduce((a, d) => a + box[d].tasks, 0);
 
-    // The Game Plan for today: each standard with your rating, his own rating
-    // and any moments you recognized. Numbered in arena order.
-    const selfToday = (s.self || []).filter(q => q.day === today);
-    const selfBy = new Map(selfToday.map(q => [q.behavior_id, q.level]));
+    // The week under review: this week (Mon-Sun, rated on Sunday). If the
+    // parents missed Sunday, last week's review stays open through Tuesday.
+    const shoutouts = s.shoutouts || [];
+    const thisKey = weekKey(), lastKey = addDays(thisKey, -7);
+    const dow = new Date().getDay();
+    const awardedFor = key => recent.some(r => r.kind === 'earn' && r.day === key);
+    const lastOpen = !s.kidView && (dow === 1 || dow === 2) && !awardedFor(lastKey)
+      && ((s.self || []).some(q => q.day === lastKey) || shoutouts.some(o => o.day >= addDays(lastKey, -6) && o.day <= lastKey));
+    const reviewKey = lastOpen ? lastKey : thisKey;
+    const reviewStart = addDays(reviewKey, -6);
+
+    // Each standard with the parents' weekly rating, his own rating and the
+    // week's shout-outs. Numbered in arena order.
+    const selfWeek = (s.self || []).filter(q => q.day === reviewKey);
+    const selfBy = new Map(selfWeek.map(q => [q.behavior_id, q.level]));
     const ordered = ARENAS.flatMap(c => (s.behaviors || []).filter(b => catOf(b) === c));
     const lineup = ordered.map((b, i) => {
-      const rating = recent.find(r => r.kind === 'earn' && r.behavior_id === b.id && r.day === today) || null;
+      const rating = recent.find(r => r.kind === 'earn' && r.behavior_id === b.id && r.day === reviewKey) || null;
       const level = !rating ? 0 : rating.level != null ? rating.level
         : rating.points === 0 ? 0 : Math.max(1, Math.min(3, Math.round(rating.points / Math.max(1, b.points))));
-      const moments = recent.filter(r => r.kind === 'moment' && r.behavior_id === b.id && r.day === today);
-      return { ...b, order: i + 1, cat: catOf(b), rating, level, self: selfBy.has(b.id) ? selfBy.get(b.id) : null, moments, status: rating ? 'done' : 'open' };
+      const shouts = shoutouts.filter(o => o.behavior_id === b.id && o.day >= reviewStart && o.day <= reviewKey);
+      return { ...b, order: i + 1, cat: catOf(b), rating, level, self: selfBy.has(b.id) ? selfBy.get(b.id) : null, shouts, status: rating ? 'done' : 'open' };
     });
     const doneCount = lineup.filter(b => b.rating).length;
-    const filedAt = selfToday.reduce((a, q) => q.updated_at && q.updated_at > a ? q.updated_at : a, '') || (selfToday.length ? 'yes' : '');
+    const filedAt = selfWeek.reduce((a, q) => q.updated_at && q.updated_at > a ? q.updated_at : a, '') || (selfWeek.length ? 'yes' : '');
 
     const rewards = (s.rewards || []).slice().sort((a, b) => a.cost - b.cost);
     const nextPrize = rewards.find(r => r.cost > s.balance) || null;
@@ -347,7 +362,9 @@ const RR = (() => {
       sportsCount: st ? st.sports_count : 0,
       allstarCount: st && st.allstar_count != null ? st.allstar_count : recent.filter(r => r.kind === 'earn' && r.level === 3).length,
       momentCount: st && st.moment_count != null ? st.moment_count : recent.filter(r => r.kind === 'moment').length,
-      selfCount: selfToday.length, filedAt,
+      selfCount: selfWeek.length, filedAt,
+      reviewKey, reviewStart, lastOpen, isSunday: dow === 0, awarded: awardedFor(reviewKey),
+      weekShouts: shoutouts.filter(o => o.day >= reviewStart && o.day <= reviewKey),
       journalCount: st ? st.journal_count : (s.journal || []).length,
       lineup, doneCount, rewards, nextPrize,
       highlights: recent.filter(gained).slice(0, 5),
@@ -405,7 +422,7 @@ const RR = (() => {
       <div class="kvs">
         ${kv('shield', 'Level ' + m.level.num, esc(m.level.name))}
         ${kv('flame', 'Streak', `${m.streak} day${m.streak === 1 ? '' : 's'}`)}
-        ${kv('bolt', 'Today', `+${fmt(m.todayXP)} XP`)}
+        ${kv('bolt', 'This week', `+${fmt(m.weekXP)} XP`)}
       </div></div>`;
   }
 
@@ -476,16 +493,17 @@ const RR = (() => {
       <div><b>${CATEGORIES[cat]}</b><small>${ARENA_INFO[cat].tag}</small></div>${extra}</div>`;
   }
 
-  // One standard. mode 'parent': rate it (and recognize moments).
-  // mode 'kid': rate yourself (draft = his unsent picks), see your parents' rating.
+  // One standard. mode 'parent': the Sunday review (draft = picks not yet
+  // awarded) plus shout-outs. mode 'kid': rate your week (draft = unsent picks).
   function standardCard(b, mode, opts = {}) {
     const kid = esc(opts.kidName || 'Jaylen');
-    const moments = b.moments.length ? `<ul class="moments">${b.moments.map(r =>
-      `<li>${icon('star', 'sm')}<span>${esc(r.reason)}</span><b>+${r.points}</b></li>`).join('')}</ul>` : '';
+    const shouts = b.shouts && b.shouts.length ? `<ul class="moments">${b.shouts.map(o =>
+      `<li>${icon('message', 'sm')}<span>${esc(o.note)}</span><small>${esc(shortDay(o.day))}</small></li>`).join('')}</ul>` : '';
     let compare, buttons;
     if (mode === 'parent') {
       compare = b.self == null ? pill(null, `${kid}: not rated yet`) : pill(b.self, `${kid} says: ${ratingLabel(b.self)}`);
-      buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${b.rating && b.level === r.v ? ' on' : ''}" data-rate="${b.id}" data-level="${r.v}" aria-pressed="${!!b.rating && b.level === r.v}">
+      const pick = opts.draft && b.id in opts.draft ? opts.draft[b.id] : (b.rating ? b.level : null);
+      buttons = RATINGS.map(r => `<button type="button" class="rate r${r.v}${pick === r.v ? ' on' : ''}" data-rate="${b.id}" data-level="${r.v}" aria-pressed="${pick === r.v}">
         ${r.label}${r.v ? `<small>+${b.points * r.v}</small>` : ''}</button>`).join('');
     } else {
       const mine = opts.draft && opts.draft[b.id] != null ? opts.draft[b.id] : b.self;
@@ -496,10 +514,10 @@ const RR = (() => {
       <div class="std-head"><span class="lu-no">${b.order}</span><b class="std-name">${esc(b.name)}</b><span class="std-xp">up to +${b.points * 3}<small>XP</small></span></div>
       ${b.description ? `<p class="std-desc">${esc(b.description)}</p>` : ''}
       ${compare ? `<div class="std-compare">${compare}</div>` : ''}
-      ${mode === 'kid' ? '<span class="std-ask">How did you do today?</span>' : ''}
+      ${mode === 'kid' ? '<span class="std-ask">How did your week go?</span>' : ''}
       <div class="rates">${buttons}</div>
-      ${moments}
-      ${mode === 'parent' ? `<button type="button" class="moment-btn" data-moment="${b.id}">${icon('star', 'sm')}Recognize a moment</button>` : ''}
+      ${shouts}
+      ${mode === 'parent' ? `<button type="button" class="moment-btn" data-moment="${b.id}">${icon('message', 'sm')}Give a shout-out</button>` : ''}
     </article>`;
   }
 
@@ -539,7 +557,7 @@ const RR = (() => {
         ${base(56, 32, on[0])}${base(32, 8, on[1])}${base(8, 32, on[2])}
         <path d="M26 52 h12 v4 l-6 5 l-6 -5 z" fill="${on[3] ? '#f6c90e' : '#f4f5f7'}"/>
       </svg>
-      <div><b>${call}</b><small>${done} of ${total} standards rated today</small></div></div>`;
+      <div><b>${call}</b><small>${done} of ${total} standards rated this week</small></div></div>`;
   }
 
   // The weekly box score, styled like a ballpark scoreboard.
@@ -685,7 +703,7 @@ const RR = (() => {
   }
 
   return {
-    client, configured, esc, $, $$, localDay, addDays, weekStart, weekDays, last7, dayLabel, shortDay, timeOf, signed, fmt, pct,
+    client, configured, esc, $, $$, localDay, addDays, weekStart, weekKey, weekDays, last7, dayLabel, shortDay, timeOf, signed, fmt, pct,
     store, toast, countTo, burst, icon, brandMark,
     MOODS, mood, promptFor, LEVELS, levelFor, CATEGORIES, catOf, model,
     ARENAS, ARENA_INFO, RATINGS, ratingLabel,

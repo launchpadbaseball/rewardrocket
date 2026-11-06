@@ -48,7 +48,7 @@
 
   // ---------------------------------------------------------------- render
   let shownBalance = null;
-  const model = () => RR.model(data);
+  const model = () => RR.model({ ...data, kidView: true });
 
   function render() {
     const m = model();
@@ -72,30 +72,39 @@
 
     const answered = (data.journal || []).some(j => j.day === localDay());
     const rated = canRate && !!m.filedAt;
+    // Step 1 is daily (today's question); step 2 is weekly (his scouting report, due Sunday).
     const steps = (canRate ? 1 : 0) + ('journal' in data ? 1 : 0);
     const done = (rated ? 1 : 0) + ('journal' in data && answered ? 1 : 0);
-    $('#k-steps-count').innerHTML = steps ? `<span class="rpill ${done === steps ? 'r1' : 'rx'}">${done === steps ? icon('check', 'sm') + 'All done today' : `${done} of ${steps} done`}</span>` : '';
+    $('#k-steps-count').innerHTML = steps ? `<span class="rpill ${done === steps ? 'r1' : 'rx'}">${done === steps ? icon('check', 'sm') + 'All done' : `${done} of ${steps} done`}</span>` : '';
     $('#k-step-rate').innerHTML = canRate ? `<button class="step${rated ? ' done' : ''}" data-go="lineup">
-        <span class="step-n">${rated ? icon('check') : '1'}</span>
-        <span class="step-body"><b>Rate yourself</b>
-          <small>${rated ? `Report filed${m.filedAt !== 'yes' ? ' at ' + RR.timeOf(m.filedAt) : ''}. Nice work.` : `How did you show up at home, in learning and on the field? ${m.lineup.length} quick ratings.`}</small></span>
+        <span class="step-n">${rated ? icon('check') : '2'}</span>
+        <span class="step-body"><b>Weekly scouting report</b>
+          <small>${rated ? `Filed${m.filedAt !== 'yes' ? ' ' + RR.dayLabel(RR.localDay(new Date(m.filedAt))).toLowerCase() : ''}. Mom &amp; Dad review the week on Sunday.`
+            : `${m.isSunday ? '<b class="due">Due today.</b> ' : '<b class="due">Due Sunday.</b> '}How did your week go at home, in learning and on the field?`}</small></span>
         <span class="step-go">${rated ? 'Edit' : 'Start'}${icon('right', 'sm')}</span></button>` : '';
+
+    // Shout-outs from Mom & Dad this week.
+    const names = Object.fromEntries((data.behaviors || []).map(b => [b.id, b.name]));
+    $('#k-shouts').innerHTML = m.weekShouts.length ? `<div class="sec"><h2>Shout-outs</h2><span class="sub">This week</span></div>
+      <div class="panel"><ul class="list">${m.weekShouts.map(o => `<li style="align-items:flex-start"><span class="mark">${icon('message', 'sm')}</span>
+        <span class="grow"><b>${esc(o.note)}</b><small>${o.behavior_id && names[o.behavior_id] ? esc(names[o.behavior_id]) + ' · ' : ''}${RR.dayLabel(o.day)}</small></span></li>`).join('')}</ul></div>` : '';
 
     // A few prizes from the locker (the Prizes tab has them all).
     $('#k-prize-next').innerHTML = m.rewards.slice(0, 4).map(r => RR.lockerItem(r, m.balance, 'kid')).join('')
       || '<div class="panel empty" style="grid-column:1/-1">Prizes are coming soon.</div>';
 
     // Game Plan: rate yourself, then file your scouting report.
-    $('#k-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    const fmtDay = ymd => { const [Y, M, D] = ymd.split('-').map(Number); return new Date(Y, M - 1, D).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
+    $('#k-date').textContent = `Week of ${fmtDay(m.reviewStart)} – ${fmtDay(m.reviewKey)} · ${m.isSunday ? 'Due today' : 'Due Sunday'}`;
     const picks = m.lineup.filter(b => (draft[b.id] != null ? draft[b.id] : b.self) != null).length;
     const changed = m.lineup.some(b => draft[b.id] != null && draft[b.id] !== b.self);
     $('#k-summary').innerHTML = `<div class="report-bar">
-        <div><span class="label">Tonight’s scouting report</span><b class="num" style="font-size:28px">${picks}<small style="font-size:15px;color:var(--muted)"> / ${m.lineup.length} rated</small></b></div>
+        <div><span class="label">This week’s scouting report</span><b class="num" style="font-size:28px">${picks}<small style="font-size:15px;color:var(--muted)"> / ${m.lineup.length} rated</small></b></div>
         ${m.filedAt ? `<span class="rpill r1">${icon('check', 'sm')}Filed${m.filedAt !== 'yes' ? ' ' + RR.timeOf(m.filedAt) : ''}</span>` : ''}</div>
       <p class="muted" style="margin:10px 0 0;font-size:13.5px">Tap how you did on each one, honestly. Then file your report.</p>`;
     $('#k-groups').innerHTML = canRate
       ? RR.gamePlan(m, 'kid', { draft }) + (picks && (changed || !m.filedAt)
-        ? `<div class="file-bar"><button class="btn block" data-file>${icon('check')}${m.filedAt ? 'Update my report' : `File my scouting report · ${picks}/${m.lineup.length}`}</button></div>`
+        ? `<div class="file-bar"><button class="btn block" data-file>${icon('check')}${m.filedAt ? 'Update my report' : `File my weekly report · ${picks}/${m.lineup.length}`}</button></div>`
         : m.filedAt ? `<div class="filed-note">${icon('check', 'sm')}Report filed. Change any rating to update it.</div>` : '')
       : '<div class="panel empty">The Game Plan is coming soon.</div>';
     renderJournal();
@@ -109,7 +118,7 @@
 
   // ---------------------------------------------------------------- scouting report
   // His picks are kept on the device until he files them.
-  const selfKey = () => 'selfdraft.' + localDay();
+  const selfKey = () => 'selfdraft.' + RR.weekKey();
   function getDraft() { try { return JSON.parse(store.get(selfKey()) || '{}'); } catch { return {}; } }
   function setDraft(d) { store.set(selfKey(), JSON.stringify(d)); }
 
@@ -125,7 +134,7 @@
     const ratings = {};
     m.lineup.forEach(b => { const v = d[b.id] != null ? d[b.id] : b.self; if (v != null) ratings[b.id] = v; });
     btn.disabled = true; btn.textContent = 'Filing…';
-    const { data: saved, error } = await db.rpc('kid_self_report', { p_token: token, p_day: localDay(), p_ratings: ratings });
+    const { data: saved, error } = await db.rpc('kid_self_report', { p_token: token, p_day: m.reviewKey, p_ratings: ratings });
     if (error) {
       toast(/Failed to fetch|Load failed|NetworkError/i.test(error.message) ? 'No internet right now. Your picks are saved. Try again in a minute.' : error.message, { warn: true });
       render();
@@ -135,7 +144,7 @@
     setDraft({});
     render();
     RR.burst(30);
-    toast('Report filed. Mom & Dad will add their ratings.');
+    toast('Report filed. Mom & Dad review the week on Sunday.');
   }
 
   // ---------------------------------------------------------------- postgame interview
@@ -155,7 +164,7 @@
     const earn = data.journal_points > 0 && !journalPaidToday();
     $('#k-q').classList.toggle('done', !!today && !jEditing);
     $('#k-q-head').innerHTML = `${icon('mic', 'oa-mic')}
-      <div class="oa-top"><span class="step-n sm">${today && !jEditing ? icon('check') : '2'}</span><span class="onair"><i></i>${today && !jEditing ? 'Wrapped' : 'On air'}</span>
+      <div class="oa-top"><span class="step-n sm">${today && !jEditing ? icon('check') : '1'}</span><span class="onair"><i></i>${today && !jEditing ? 'Wrapped' : 'On air'}</span>
         <span class="oa-k">Postgame Interview</span>${earn ? `<span class="oa-xp">+${data.journal_points} XP</span>` : ''}</div>
       <span class="oa-label">Today’s question</span>
       <h2 class="oa-q">${esc(RR.promptFor(localDay()))}</h2>`;
@@ -252,6 +261,8 @@
     const unlockedNow = m.rewards.filter(r => m.balance >= r.cost);
     const journal = data.journal || [];
     const lastLevel = store.get('level');
+    let shoutsSeen;
+    try { shoutsSeen = new Set(JSON.parse(store.get('shouts') || '[]')); } catch { shoutsSeen = new Set(); }
 
     // First visit on this device: remember where things stand, no fireworks.
     if (!first || store.get('seen')) {
@@ -262,8 +273,8 @@
       if (ratings.length) {
         const n = l => ratings.filter(r => r.level === l).length;
         const parts = [[3, 'All-Star'], [2, 'Strong'], [1, 'Solid']].filter(([l]) => n(l)).map(([l, t]) => `${n(l)} ${t}`);
-        RR.celebrate({ kicker: 'Scouting report', title: `+${sum(ratings)} XP`, medal: n(3) ? 'star' : '', big: n(3) > 0,
-          body: `Mom & Dad rated your day: ${parts.join(' · ')}.` });
+        RR.celebrate({ kicker: 'Sunday review', title: `+${sum(ratings)} XP`, medal: n(3) ? 'star' : 'trophy', big: true,
+          body: `Mom & Dad reviewed your week: ${parts.join(' · ')}.` });
       }
       // A moment they noticed.
       fresh.filter(r => r.kind === 'moment').slice(0, 3).forEach(r =>
@@ -282,7 +293,10 @@
         RR.celebrate({ kicker: 'Prize unlocked', title: r.name, image: r.image_url, big: true, body: 'Ask a parent to redeem it from the Prize Locker.' }));
       journal.filter(j => j.parent_reply && replies[j.id] !== j.parent_reply).slice(0, 2).forEach(j =>
         RR.celebrate({ kicker: 'Postgame Interview', title: 'Mom & Dad replied', body: j.parent_reply, ok: 'Got it' }));
+      (data.shoutouts || []).filter(o => !shoutsSeen.has(o.id)).slice(0, 3).forEach(o =>
+        RR.celebrate({ kicker: 'Shout-out', title: 'Mom & Dad noticed', medal: 'message', body: o.note, ok: 'Thanks' }));
     }
+    store.set('shouts', JSON.stringify((data.shoutouts || []).map(o => o.id)));
 
     store.set('seen', JSON.stringify(data.recent.map(r => r.id)));
     store.set('unlocked', JSON.stringify(unlockedNow.map(r => r.id)));

@@ -22,6 +22,8 @@
     journal: [],         // newest day first
     self: [],            // his own ratings of each standard (last 2 weeks)
     gameMissing: false,  // true until supabase/add-gameplan.sql has been run
+    shoutouts: [],       // recognition during the week (no XP)
+    weeklyMissing: false, // true until supabase/add-weekly.sql has been run
     stats: null,         // career stats (lifetime XP etc.)
     activity: [],        // what Jaylen did (check-ins, interviews), newest first
     activityMissing: false,
@@ -45,7 +47,7 @@
   label('#nav-stats', 'stats', 'Stats');
   $('#nav-stats').insertAdjacentHTML('beforeend', '<i class="dot" id="stats-dot" hidden></i>');
   $('#btn-manage').innerHTML = icon('gear');
-  label('#btn-bonus', 'plus', 'Bonus XP');
+  label('#btn-bonus', 'plus', 'Weekly bonus');
   label('[data-manage="lineup"]', 'edit', 'Edit standards');
   label('#btn-add-prize', 'plus', 'Add prize');
   label('#btn-add-behavior', 'plus', 'Add a standard');
@@ -146,7 +148,7 @@
 
   async function loadAll() {
     const since = new Date(); since.setDate(since.getDate() - HISTORY_DAYS);
-    const [s, b, r, l, bal, red, jr, ps, rq, ac, nt] = await Promise.all([
+    const [s, b, r, l, bal, red, jr, ps, rq, ac, nt, sh0] = await Promise.all([
       db.from('settings').select('*').eq('id', 1).maybeSingle(),
       db.from('behaviors').select('*').order('sort').order('created_at'),
       db.from('rewards').select('*').order('cost').order('sort'),
@@ -155,9 +157,10 @@
       db.from('ledger').select('*').eq('kind', 'redeem').order('created_at', { ascending: false }).limit(50),
       db.from('journal').select('*').order('day', { ascending: false }).limit(60),
       db.rpc('player_stats'),
-      db.from('self_ratings').select('*').gte('day', RR.addDays(localDay(), -14)),
+      db.from('self_ratings').select('*').gte('day', RR.addDays(localDay(), -21)),
       db.from('activity').select('*').order('created_at', { ascending: false }).limit(40),
-      db.rpc('my_notifications')
+      db.rpc('my_notifications'),
+      db.from('shoutouts').select('*').order('created_at', { ascending: false }).limit(100)
     ]);
     const err = [s, b, r, l, bal, red].find(x => x.error);
     if (err) { toast(friendly(err.error), { warn: true }); return; }
@@ -178,6 +181,8 @@
     state.gameMissing = !!rq.error || !('description' in (b.data[0] || { description: '' }));
     state.stats = ps.error ? null : ps.data;
     state.self = rq.error ? [] : rq.data;
+    state.weeklyMissing = !!sh0.error;
+    state.shoutouts = sh0.error ? [] : sh0.data;
     state.activityMissing = !!ac.error;
     state.activity = ac.error ? [] : ac.data;
     state.notif = nt.error ? null : nt.data;
@@ -191,7 +196,7 @@
   function subscribe() {
     if (channel) return;
     channel = db.channel('family');
-    ['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'self_ratings', 'activity'].forEach(table =>
+    ['ledger', 'behaviors', 'rewards', 'settings', 'journal', 'self_ratings', 'activity', 'shoutouts'].forEach(table =>
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, reloadSoon));
     // Something Jaylen just did: pop it up right away.
     channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity' }, ({ new: a }) => alertActivity(a));
@@ -219,7 +224,8 @@
       recent: state.ledger,
       journal: state.journal,
       stats: state.stats,
-      self: state.self
+      self: state.self,
+      shoutouts: state.shoutouts
     });
   }
 
@@ -243,26 +249,46 @@
     const reportWaiting = !!m.filedAt && left > 0;
     renderInterview();
 
-    // Tabbed card: today's Game Plan (his rating and yours), scoreboard, highlights.
-    const planPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm" data-go="lineup">${left ? 'Rate today' : 'Game Plan'}</button></div>` +
-      (reportWaiting ? `<button class="alert" data-go="lineup" style="margin:0 0 12px">${icon('stats')}<span class="grow"><b>${esc(kidName())} filed his scouting report</b>
-        <small>Your turn: ${left} standard${left === 1 ? '' : 's'} left to rate.</small></span>${icon('right', 'sm')}</button>` : '') +
+    // Tabbed card: this week (his rating and yours), scoreboard, highlights.
+    const reviewDue = m.isSunday || m.lastOpen;
+    const planPane = `<div class="pane-head">${RR.diamond(m)}<button class="btn sm" data-go="lineup">${!m.awarded && reviewDue ? 'Review the week' : 'Game Plan'}</button></div>` +
+      (!m.awarded && (reportWaiting || reviewDue) ? `<button class="alert" data-go="lineup" style="margin:0 0 12px">${icon('stats')}<span class="grow">
+        <b>${m.lastOpen ? 'Last week’s review is still open' : reviewDue ? 'Sunday review: rate the week' : `${esc(kidName())} filed his weekly scouting report`}</b>
+        <small>${m.filedAt ? `${esc(kidName())} has rated himself. ` : ''}Rate each standard and award the week’s XP.</small></span>${icon('right', 'sm')}</button>` : '') +
       RR.gameSummary(m, kidName());
     $('#c-tabs').innerHTML = RR.tabcard('club', [
-      { key: 'lineup', label: 'Today’s Game Plan', html: planPane },
+      { key: 'lineup', label: 'This Week', html: planPane },
       { key: 'score', label: 'Scoreboard', html: RR.scoreboard(m) + '<div style="margin-top:12px">' + RR.statGrid(m) + '</div>' },
       { key: 'high', label: 'Highlights', html: RR.highlights(m) }
     ]);
   }
 
+  // ---------------------------------------------------------------- the Sunday review
+  // Your picks are a draft (kept on this phone) until you tap Award.
+  const draftKey = m => 'review.' + m.reviewKey;
+  const getDraft = m => { try { return JSON.parse(store.get(draftKey(m)) || '{}'); } catch { return {}; } };
+  const setDraft = (m, d) => store.set(draftKey(m), JSON.stringify(d));
+  const pickOf = (b, d) => b.id in d ? d[b.id] : (b.rating ? b.level : null);
+
   function renderLineup(m) {
-    $('#l-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) + ' · Rate each standard';
-    const filed = m.filedAt ? `${kidName()} filed his scouting report${m.filedAt !== 'yes' ? ' at ' + RR.timeOf(m.filedAt) : ''}. His rating is shown on each standard.`
-      : `${kidName()} hasn’t filed tonight’s scouting report yet.`;
+    const d = getDraft(m);
+    const fmtDay = ymd => { const [Y, M, D] = ymd.split('-').map(Number); return new Date(Y, M - 1, D).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
+    $('#l-date').textContent = `Week of ${fmtDay(m.reviewStart)} – ${fmtDay(m.reviewKey)} · ` +
+      (m.lastOpen ? 'Last week, still open' : m.isSunday ? 'Review day' : 'Review on Sunday');
+    const filed = m.filedAt ? `${kidName()} filed his weekly scouting report${m.filedAt !== 'yes' ? ' ' + RR.dayLabel(RR.localDay(new Date(m.filedAt))).toLowerCase() : ''}. His rating is on each standard.`
+      : `${kidName()} hasn’t filed his weekly scouting report yet.`;
+    const total = m.lineup.reduce((a, b) => a + (pickOf(b, d) || 0) * b.points, 0);
+    const changes = m.lineup.filter(b => b.id in d && d[b.id] !== (b.rating ? b.level : null)).length;
     $('#l-summary').innerHTML = `<div class="pane-head" style="margin:0">${RR.diamond(m)}
-      <div style="text-align:right"><span class="label">Today</span><b class="num" style="font-size:28px;color:var(--gold)">+${fmt(m.todayXP)}</b></div></div>
-      <p class="muted" style="margin:10px 0 0;font-size:13.5px">${esc(filed)} Solid, Strong and All-Star earn 1×, 2× or 3× a standard’s XP.</p>`;
-    $('#l-groups').innerHTML = RR.gamePlan(m, 'parent', { kidName: kidName() });
+      <div style="text-align:right"><span class="label">${m.awarded ? 'Awarded' : 'This week'}</span><b class="num" style="font-size:28px;color:var(--gold)">+${fmt(total)}</b></div></div>
+      <p class="muted" style="margin:10px 0 0;font-size:13.5px">${esc(filed)} XP is awarded once a week: rate each standard, then tap <b>Award</b>. Shout-outs during the week carry no XP.</p>`;
+    const awardBar = !m.awarded
+      ? `<div class="file-bar"><button class="btn block" data-award-week ${m.lineup.some(b => pickOf(b, d) != null) ? '' : 'disabled'}>${icon('trophy')}Award this week’s XP · +${fmt(total)}</button></div>`
+      : changes ? `<div class="file-bar"><button class="btn block" data-award-week>${icon('check')}Update awards (${changes} change${changes === 1 ? '' : 's'})</button></div>`
+      : `<div class="filed-note">${icon('check', 'sm')}This week is awarded. Change a rating to update it.</div>`;
+    $('#l-groups').innerHTML = (state.weeklyMissing
+      ? `<div class="alert amber" style="margin:0 0 12px">${icon('bolt')}<span class="grow"><b>One-time database upgrade</b><small>Run <code>supabase/add-weekly.sql</code> in Supabase to turn on weekly points and shout-outs.</small></span></div>` : '')
+      + RR.gamePlan(m, 'parent', { kidName: kidName(), draft: d }) + awardBar;
   }
 
   function renderLocker(m) {
@@ -288,26 +314,45 @@
 
   // ---------------------------------------------------------------- rating the Game Plan
   const busy = new Set();
-  const todaysRating = id => state.ledger.find(r => r.kind === 'earn' && r.behavior_id === id && r.day === localDay());
 
   const levelOf = (row, b) => row.level != null ? row.level
     : row.points === 0 ? 0 : Math.max(1, Math.min(3, Math.round(row.points / Math.max(1, b.points))));
 
-  // A tap on a rating button. Tapping the rating that's already selected clears it.
+  // A tap on a rating button changes the draft. Tapping the selected rating clears it.
   function rate(id, tapped) {
-    const b = state.behaviors.find(x => x.id === id);
-    const row = b && todaysRating(id);
-    const prev = row ? levelOf(row, b) : null;
-    return setRating(id, tapped === prev ? null : tapped);
+    const m = model(), d = getDraft(m);
+    const b = m.lineup.find(x => x.id === id);
+    if (!b) return;
+    d[id] = pickOf(b, d) === tapped ? null : tapped;
+    setDraft(m, d);
+    renderLineup(m);
   }
 
-  // Set today's rating for a standard: 0 = Not today (rated, no XP),
-  // 1-3 = Solid / Strong / All-Star, null = not rated. One rating per standard
-  // per day; the database enforces that even if both parents tap at once.
-  async function setRating(id, level, quiet = false) {
+  // Award (or update) the week: one rating per standard, stored on the week's Sunday.
+  async function awardWeek(btn) {
+    const m = model(), d = getDraft(m);
+    const todo = m.lineup.filter(b => b.id in d && d[b.id] !== (b.rating ? b.level : null));
+    if (!todo.length && m.awarded) return;
+    btn.disabled = true;
+    const before = model();
+    for (const b of todo) await setRating(b.id, d[b.id], true, m.reviewKey);
+    setDraft(m, {});
+    const after = model();
+    const xp = after.balance - before.balance;
+    const levelUp = after.level.idx > before.level.idx;
+    burst(levelUp ? 70 : 40);
+    toast(`${m.awarded ? 'Awards updated' : 'Week awarded'} · ${xp >= 0 ? '+' : '−'}${Math.abs(xp)} XP` + (levelUp ? ` · Level up: ${after.level.name}` : ''));
+    loadAll();
+  }
+
+  // Set a standard's rating for the week ending on `day` (its Sunday):
+  // 0 = Not this week (rated, no XP), 1-3 = Solid / Strong / All-Star,
+  // null = not rated. One rating per standard per week; the database
+  // enforces that even if both parents award at once.
+  async function setRating(id, level, quiet = false, day = model().reviewKey) {
     const b = state.behaviors.find(x => x.id === id);
     if (!b || busy.has(id)) return;
-    const row = todaysRating(id);
+    const row = state.ledger.find(r => r.kind === 'earn' && r.behavior_id === id && r.day === day);
     const prev = row ? levelOf(row, b) : null;
     if (prev === level) return;
     busy.add(id);
@@ -317,7 +362,7 @@
     const lv = state.gameMissing ? {} : { level };
     const res = level === null ? await db.from('ledger').delete().eq('id', row.id)
       : row ? await db.from('ledger').update({ points: pts, ...lv }).eq('id', row.id).select().single()
-      : await db.from('ledger').insert({ day: localDay(), kind: 'earn', points: pts, ...lv, reason: b.name, emoji: b.emoji, behavior_id: b.id, once_daily: true }).select().single();
+      : await db.from('ledger').insert({ day, kind: 'earn', points: pts, ...lv, reason: b.name, emoji: b.emoji, behavior_id: b.id, once_daily: true }).select().single();
     busy.delete(id);
     if (res.error) {
       const clash = res.error.code === '23505';
@@ -338,39 +383,29 @@
     if (quiet) return;
     const xp = delta ? ` · ${delta > 0 ? '+' : '−'}${Math.abs(delta)} XP` : '';
     const msg = level === null ? `${b.name}: rating cleared${xp}` : `${b.name}: ${RR.ratingLabel(level)}${xp}`;
-    announce(before, model(), msg, async () => { await setRating(id, prev, true); toast('Undone'); });
+    announce(before, model(), msg, async () => { await setRating(id, prev, true, day); toast('Undone'); });
   }
 
-  // Recognize a standout moment, with a note about what he did.
+  // A shout-out: recognize him any time. No XP; he sees it right away.
   function momentSheet(id) {
     const b = state.behaviors.find(x => x.id === id);
-    let amt = b.points * 2;
-    const s = sheet(`<h3>Recognize a moment</h3>
-      <p class="muted" style="margin-top:0">${esc(b.name)} · ${RR.CATEGORIES[RR.catOf(b)]}</p>
+    const s = sheet(`<h3>Give a shout-out</h3>
+      <p class="muted" style="margin-top:0">${esc(b.name)} · ${RR.CATEGORIES[RR.catOf(b)]}. ${esc(kidName())} sees it right away. No XP; it helps with the Sunday review.</p>
       <label class="field"><span class="label">What did he do?</span>
-        <textarea class="input" name="note" rows="2" maxlength="140" placeholder="e.g. Helped his sister with her homework without being asked"></textarea></label>
-      <div class="field"><span class="label" style="margin-bottom:6px">XP</span>
-        <div class="chips">${[1, 2, 3].map(k => `<button type="button" class="chip${k === 2 ? ' on' : ''}" data-amt="${b.points * k}">+${b.points * k} XP</button>`).join('')}</div></div>
+        <textarea class="input" name="note" rows="2" maxlength="200" placeholder="e.g. Helped his sister with her homework without being asked"></textarea></label>
       <p class="err"></p>
-      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-save>${icon('star')}Recognize</button></div>`);
-    s.el.querySelectorAll('[data-amt]').forEach(c => c.addEventListener('click', () => {
-      amt = +c.dataset.amt;
-      s.el.querySelectorAll('[data-amt]').forEach(x => x.classList.toggle('on', x === c));
-    }));
+      <div class="btns"><button class="btn ghost" data-close>Cancel</button><button class="btn" data-save>${icon('message')}Send shout-out</button></div>`);
     s.on('[data-save]', async btn => {
       const note = s.el.querySelector('[name=note]').value.trim();
+      if (!note) { s.err('Say what he did.'); return; }
       btn.disabled = true;
-      const before = model();
-      const { data, error } = await db.from('ledger').insert({ day: localDay(), kind: 'moment', points: amt, reason: note || b.name, emoji: b.emoji, behavior_id: b.id }).select().single();
+      const { data, error } = await db.from('shoutouts').insert({ day: localDay(), behavior_id: b.id, note }).select().single();
       btn.disabled = false;
-      if (error) { s.err(friendly(error)); return; }
+      if (error) { s.err(/shoutouts/.test(error.message) ? 'Run supabase/add-weekly.sql in Supabase first (see the README).' : friendly(error)); return; }
       s.close();
-      state.ledger.unshift(data);
-      state.balance += amt;
-      if (state.stats) state.stats = { ...state.stats, lifetime_xp: state.stats.lifetime_xp + amt };
+      state.shoutouts.unshift(data);
       render();
-      announce(before, model(), `Moment recognized · +${amt} XP`, () => undo(data));
-      loadAll();
+      toast(`Shout-out sent to ${kidName()}`);
     });
   }
 
@@ -919,13 +954,14 @@
 
   // One listener for every tappable thing inside the app.
   $('#screen-app').addEventListener('click', e => {
-    const t = e.target.closest('[data-go],[data-manage],[data-rate],[data-moment],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-bonus],[data-edit-b],[data-move]');
+    const t = e.target.closest('[data-go],[data-manage],[data-rate],[data-award-week],[data-moment],[data-redeem],[data-edit-prize],[data-del-row],[data-reply],[data-open-journal],[data-bonus],[data-edit-b],[data-move]');
     if (!t) return;
     const d = t.dataset;
     if (t.id === 'manage-back') { goTab(state.prevTab); return; }
     if (d.go) goTab(d.go);
     else if (d.manage) { goTab('manage'); $('#manage-lineup').scrollIntoView(); }
     else if (d.rate) rate(d.rate, +d.level);
+    else if ('awardWeek' in d) awardWeek(t);
     else if (d.moment) momentSheet(d.moment);
     else if (d.redeem) redeem(d.redeem, t);
     else if (d.editPrize) prizeSheet(state.rewards.find(r => r.id === d.editPrize));
